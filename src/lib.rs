@@ -1,5 +1,3 @@
-#![no_std]
-
 pub mod marshal;
 pub mod signature;
 pub mod strings;
