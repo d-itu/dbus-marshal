@@ -1,111 +1,13 @@
-use core::ptr;
+use crate::{marshal::writer::*, signature::Signature, strings, types::*};
 
-use crate::{
-    aligned,
-    signature::{self, Signature},
-    strings,
-};
-
-pub unsafe trait Write: Copy {
-    fn position(&self) -> usize;
-
-    fn align_to(&mut self, n: usize);
-
-    fn skip(&mut self, n: usize);
-
-    #[must_use]
-    fn skip_aligned(&mut self, n: usize) -> Self {
-        let result = *self;
-        self.align_to(n);
-        self.skip(n);
-        result
-    }
-
-    fn write_bytes(&mut self, bytes: &[u8]);
-
-    fn write_byte(&mut self, byte: u8);
-
-    fn write_value<T: Marshal>(&mut self, v: T) {
-        v.marshal(self)
-    }
-}
-
-unsafe impl Write for usize {
-    fn write_bytes(&mut self, bytes: &[u8]) {
-        *self += bytes.len();
-    }
-    fn write_byte(&mut self, _: u8) {
-        *self += 1;
-    }
-    fn align_to(&mut self, n: usize) {
-        *self = aligned(*self, n);
-    }
-    fn skip(&mut self, n: usize) {
-        *self += n;
-    }
-    fn position(&self) -> usize {
-        *self
-    }
-}
-
-#[derive(Clone, Copy)]
-struct Span {
-    begin: *mut u8,
-    end: *mut u8,
-}
-
-impl Span {
-    fn new(ptr: *mut u8) -> Self {
-        Self {
-            begin: ptr,
-            end: ptr,
-        }
-    }
-    fn len(&self) -> usize {
-        self.end.addr() - self.begin.addr()
-    }
-}
-
-unsafe impl Write for Span {
-    fn write_bytes(&mut self, bytes: &[u8]) {
-        unsafe {
-            ptr::copy_nonoverlapping(bytes.as_ptr(), self.end, bytes.len());
-            self.end = self.end.add(bytes.len());
-        }
-    }
-
-    fn write_byte(&mut self, byte: u8) {
-        unsafe {
-            *self.end = byte;
-            self.end = self.end.add(1);
-        };
-    }
-
-    fn skip(&mut self, n: usize) {
-        unsafe { self.end = self.end.add(n) };
-    }
-
-    fn align_to(&mut self, n: usize) {
-        self.end = unsafe { self.begin.add(aligned(self.len(), n)) };
-    }
-
-    fn position(&self) -> usize {
-        self.len()
-    }
-}
-
-pub trait Marshal: Copy {
-    type Signature: Signature + ?Sized;
-
-    fn marshal<W: Write>(self, w: &mut W);
+pub const trait Marshal: Copy {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W);
 }
 
 macro_rules! impl_marshal {
     ($($t: ty),* $(,)?) => {
-        $(impl Marshal for $t {
-            type Signature = $t;
-
-            fn marshal<W: Write>(self, w: &mut W) {
+        $(impl const Marshal for $t {
+            fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
                 w.align_to(core::mem::align_of::<$t>());
                 w.write_bytes(&self.to_ne_bytes());
             }
@@ -113,20 +15,28 @@ macro_rules! impl_marshal {
     };
 }
 
-impl<T: Marshal> Marshal for &T {
-    type Signature = T::Signature;
+impl_marshal!(u8, i16, u16, i32, u32, i64, u64, f64);
 
-    fn marshal<W: Write>(self, w: &mut W) {
-        w.write_value(*self)
+macro_rules! impl_non_zero {
+    ($($t: ty),* $(,)?) => {
+        $(impl const Marshal for core::num::NonZero<$t> {
+            fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+                w.write(self.get());
+            }
+        })*
+    };
+}
+
+impl_non_zero!(u8, i16, u16, i32, u32, i64, u64);
+
+impl<T: [const] Marshal> const Marshal for &T {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+        w.write(*self)
     }
 }
 
-impl_marshal!(u8, i16, u16, i32, u32, i64, u64, f64);
-
-impl Marshal for bool {
-    type Signature = bool;
-
-    fn marshal<W: Write>(self, w: &mut W) {
+impl const Marshal for bool {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
         w.align_to(4);
         match self {
             true => 1u32,
@@ -136,113 +46,174 @@ impl Marshal for bool {
     }
 }
 
-fn write_string<W: Write>(w: &mut W, string: &[u8]) {
-    w.write_value(string.len() as u32);
+const fn write_string_like<W: [const] Write + ?Sized>(w: &mut W, string: &[u8]) {
+    w.write(string.len() as u32);
     w.write_bytes(string);
     w.write_byte(0)
 }
 
-impl Marshal for &strings::String {
-    type Signature = strings::String;
-
-    fn marshal<W: Write>(self, w: &mut W) {
-        write_string(w, self)
+impl const Marshal for &strings::String {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+        write_string_like(w, self.as_bytes())
     }
 }
 
-impl Marshal for &strings::Signature {
-    type Signature = strings::Signature;
-
-    fn marshal<W: Write>(self, w: &mut W) {
-        w.write_byte(self.len() as _);
-        w.write_bytes(self);
+impl const Marshal for &strings::Signature {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+        w.write_byte(self.as_bytes().len() as _);
+        w.write_bytes(self.as_bytes());
         w.write_byte(0)
     }
 }
 
-impl Marshal for &strings::ObjectPath {
-    type Signature = strings::ObjectPath;
-
-    fn marshal<W: Write>(self, w: &mut W) {
-        write_string(w, self)
+impl const Marshal for &strings::ObjectPath {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+        write_string_like(w, self.as_bytes())
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Variant<T: Marshal>(T);
-
-impl<T: Marshal> Marshal for Variant<T> {
-    type Signature = strings::ObjectPath;
-
-    fn marshal<W: Write>(self, w: &mut W) {
-        let sig = crate::signature_bytes!(Self::Signature);
+impl<T: [const] Marshal + Signature> const Marshal for Variant<T> {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+        let sig = crate::signature_bytes!(T);
         let sig = strings::Signature::from_bytes(sig);
-        w.write_value(sig);
-        w.write_value(self.0)
+        w.write(sig);
+        w.write(self.0)
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Array<T, I>(pub I)
-where
-    I: Copy,
-    T: Marshal,
-    for<'a> &'a I: IntoIterator<Item = &'a T>;
-
-impl<T, I> Marshal for &Array<T, I>
-where
-    I: Copy,
-    T: Marshal,
-    for<'a> &'a I: IntoIterator<Item = &'a T>,
-{
-    type Signature = signature::Array<T::Signature>;
-
-    fn marshal<W: Write>(self, w: &mut W) {
-        let mut len_writer = w.skip_aligned(4);
-        for v in &self.0 {
-            w.write_value(v);
-        }
-        let len = w.position() - len_writer.position();
-        len_writer.write_value(len as u32)
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct DictEntry<K: Marshal, V: Marshal>(pub K, pub V);
-impl<K: Marshal, V: Marshal> Marshal for DictEntry<K, V> {
-    type Signature = signature::DictEntry<K::Signature, V::Signature>;
-
-    fn marshal<W: Write>(self, w: &mut W) {
+impl<K: [const] Marshal, V: [const] Marshal> const Marshal for Entry<K, V> {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
         w.align_to(8);
-        w.write_value(self.0);
-        w.write_value(self.1)
+        w.write(self.0);
+        w.write(self.1);
     }
 }
 
-pub fn calc_size<Value: Marshal>(value: Value) -> usize {
+impl const Marshal for Empty {
+    fn marshal<W: [const] Write + ?Sized>(self, _: &mut W) {}
+}
+impl<Xs: [const] Marshal, X: [const] Marshal> const Marshal for Append<Xs, X> {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+        let Self(xs, x) = self;
+        w.write(xs);
+        w.write(x);
+    }
+}
+impl<T: [const] Marshal + StructConstructor> const Marshal for Struct<T> {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+        w.align_to(8);
+        w.write(self.0);
+    }
+}
+
+const fn marshal_array_elements<T: [const] Marshal, W: [const] Write + ?Sized>(
+    arr: &[T],
+    w: &mut W,
+) {
+    if let [x, xs @ ..] = arr {
+        w.write(x);
+        marshal_array_elements(xs, w)
+    }
+}
+
+impl<T: Signature + [const] Marshal> const Marshal for &[T] {
+    fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
+        let insert_pos = w.skip_aligned(4);
+        w.align_to(T::ALIGN);
+        let begin = w.position();
+        marshal_array_elements(self, w);
+        let len = w.position() - begin;
+        w.insert(len as u32, insert_pos);
+    }
+}
+
+pub const fn calc_size<Value: [const] Marshal>(value: Value) -> usize {
     let mut count = 0;
     value.marshal(&mut count);
     count
 }
 
 /// safety: caller must ensure that `ptr` is valid for writing `calc_size(value)` bytes.
-pub unsafe fn write_unchecked<Value: Marshal>(value: Value, ptr: *mut u8) {
+pub const unsafe fn write_unchecked<Value: [const] Marshal>(value: Value, ptr: *mut u8) {
     let mut writer = Span::new(ptr);
     value.marshal(&mut writer);
 }
 
+#[macro_export]
+macro_rules! marshal_const {
+    ($vis:vis const $iden:ident = $expr:expr) => {
+        $vis const $iden: [u8; crate::marshal::calc_size($expr)] = {
+            let mut buf = [0; crate::marshal::calc_size($expr)];
+            unsafe { crate::marshal::write_unchecked($expr, buf.as_mut_ptr() as _) };
+            buf
+        };
+    };
+}
+
+#[cfg(any(feature = "std", test))]
+#[must_use]
 pub fn marshal<Value: Marshal>(value: Value) -> Box<[u8]> {
+    #[cfg(any(test, debug_assertions))]
+    let mut buf = Box::new_zeroed_slice(calc_size(value));
+
+    #[cfg(not(any(test, debug_assertions)))]
     let mut res = Box::new_uninit_slice(calc_size(value));
+
     unsafe {
-        write_unchecked(value, res.as_mut_ptr() as _);
-        res.assume_init()
+        write_unchecked(value, buf.as_mut_ptr() as _);
+        buf.assume_init()
     }
 }
 
+pub use writer::Write;
+
+mod writer;
+
+#[cfg(target_endian = "little")]
 #[test]
 fn test_marshal() {
-    0.marshal(&mut 0);
-    DictEntry(0, &&1).marshal(&mut 0);
-    let arr = Array([0]);
-    arr.marshal(&mut 0);
+    marshal_const!(const X = 1u16);
+    static_assertions::const_assert!(match X {
+        [1, 0] => true,
+        _ => false,
+    });
+
+    let x = marshal(&[2u64][..]);
+    #[rustfmt::skip]
+    assert_eq!(x.as_slice(), [
+        8, 0, 0, 0,
+        0, 0, 0, 0,
+        2, 0, 0, 0, 0, 0, 0, 0
+    ]);
+
+    let x = marshal(&[Entry(2i32, 23u8), Entry(3i32, 24u8)][..]);
+    #[rustfmt::skip]
+    assert_eq!(x.as_slice(), [
+        13, 0, 0, 0,
+        0, 0, 0, 0,
+
+        2, 0, 0, 0,
+        23, 0, 0, 0,
+
+        3, 0, 0, 0,
+        24,
+    ]);
+
+    let x = marshal(
+        &[
+            crate::struct_new!(2i32, 23u8),
+            crate::struct_new!(3i32, 24u8),
+        ][..],
+    );
+    #[rustfmt::skip]
+    assert_eq!(x.as_slice(), [
+        13, 0, 0, 0,
+        0, 0, 0, 0,
+
+        2, 0, 0, 0,
+        23, 0, 0, 0,
+
+        3, 0, 0, 0,
+        24,
+    ]);
 }

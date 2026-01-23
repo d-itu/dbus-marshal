@@ -3,5 +3,9 @@ name = "dbus-marshal"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+std = []
+
 [dependencies]
 static_assertions = "1.1.0"
+zerocopy = { version = "0.8.33", features = ["derive", "std"] }
