@@ -1,11 +1,7 @@
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![feature(
-    const_cmp,
     const_destruct,
     const_index,
-    const_option_ops,
-    const_result_trait_fn,
-    const_slice_make_iter,
     const_trait_impl,
     const_try,
     slice_from_ptr_range,
@@ -17,17 +13,22 @@ pub mod unmarshal;
 
 use core::mem::MaybeUninit;
 
-pub use header::*;
+pub use message::*;
 pub use strings::*;
 pub use types::*;
 
-mod header;
+mod message;
 mod signature;
 mod strings;
 mod types;
 
 const fn aligned(size: usize, align: usize) -> usize {
     (size + align - 1) & !(align - 1)
+}
+
+#[allow(dead_code)]
+const fn align_padding(size: usize, align: usize) -> usize {
+    aligned(size, align) - size
 }
 
 struct ArrayVec<T, const N: usize> {

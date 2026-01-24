@@ -74,9 +74,7 @@ impl const Marshal for &strings::ObjectPath {
 
 impl<T: [const] Marshal + Signature> const Marshal for Variant<T> {
     fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
-        let sig = crate::signature_bytes!(T);
-        let sig = strings::Signature::from_bytes(sig);
-        w.write(sig);
+        w.write(crate::signature!(T));
         w.write(self.0)
     }
 }

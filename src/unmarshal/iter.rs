@@ -49,9 +49,10 @@ pub enum Token<'a> {
 
 macro_rules! define_token_kind {
     ($($name:ident = $value:literal),* $(,)?) => {
+        #[allow(dead_code)]
         #[derive(Debug, Clone, Copy, PartialEq)]
         #[repr(u8)]
-        pub enum TokenKind {
+        enum TokenKind {
             $($name = $value,)*
         }
 
@@ -88,6 +89,19 @@ define_token_kind! {
     StructClose = b')',
     EntryOpen = b'{',
     EntryClose = b'}',
+}
+
+impl TokenKind {
+    #[allow(dead_code)]
+    fn alignment(self) -> usize {
+        match self {
+            Self::U8 | Self::Signature | Self::Variant => 1,
+            Self::I16 | Self::U16 => 2,
+            Self::I32 | Self::U32 | Self::Bool | Self::String | Self::Object | Self::Array => 4,
+            Self::I64 | Self::U64 | Self::F64 | Self::StructOpen | Self::EntryOpen => 8,
+            Self::StructClose | Self::EntryClose => unreachable!(),
+        }
+    }
 }
 
 enum Nesting<'a> {
@@ -282,29 +296,25 @@ impl<'a> Iter<'a> {
         };
         debug_assert_eq!(self.array_depth, 0);
         Ok(match kind {
-            TokenKind::U8 => Token::U8(self.reader.next_unchecked::<u8>()?),
-            TokenKind::Bool => Token::Bool(self.reader.next_unchecked::<bool>()?),
-            TokenKind::I16 => Token::I16(self.reader.next_unchecked::<i16>()?),
-            TokenKind::U16 => Token::U16(self.reader.next_unchecked::<u16>()?),
-            TokenKind::I32 => Token::I32(self.reader.next_unchecked::<i32>()?),
-            TokenKind::U32 => Token::U32(self.reader.next_unchecked::<u32>()?),
-            TokenKind::I64 => Token::I64(self.reader.next_unchecked::<i64>()?),
-            TokenKind::U64 => Token::U64(self.reader.next_unchecked::<u64>()?),
-            TokenKind::F64 => Token::F64(self.reader.next_unchecked::<f64>()?),
-            TokenKind::String => Token::String(self.reader.next_unchecked::<&strings::String>()?),
-            TokenKind::Object => {
-                Token::Object(self.reader.next_unchecked::<&strings::ObjectPath>()?)
-            }
-            TokenKind::Signature => {
-                Token::Signature(self.reader.next_unchecked::<&strings::Signature>()?)
-            }
+            TokenKind::U8 => Token::U8(self.reader.read::<u8>()?),
+            TokenKind::Bool => Token::Bool(self.reader.read::<bool>()?),
+            TokenKind::I16 => Token::I16(self.reader.read::<i16>()?),
+            TokenKind::U16 => Token::U16(self.reader.read::<u16>()?),
+            TokenKind::I32 => Token::I32(self.reader.read::<i32>()?),
+            TokenKind::U32 => Token::U32(self.reader.read::<u32>()?),
+            TokenKind::I64 => Token::I64(self.reader.read::<i64>()?),
+            TokenKind::U64 => Token::U64(self.reader.read::<u64>()?),
+            TokenKind::F64 => Token::F64(self.reader.read::<f64>()?),
+            TokenKind::String => Token::String(self.reader.read::<&strings::String>()?),
+            TokenKind::Object => Token::Object(self.reader.read::<&strings::ObjectPath>()?),
+            TokenKind::Signature => Token::Signature(self.reader.read::<&strings::Signature>()?),
             TokenKind::Array => {
-                let len = self.reader.next_unchecked::<u32>()? as usize;
+                let len = self.reader.read::<u32>()? as usize;
                 if let TokenKind::U64
                 | TokenKind::I64
                 | TokenKind::F64
                 | TokenKind::StructOpen
-                | TokenKind::StructClose = unsafe { mem::transmute(*payload.get_unchecked(0)) }
+                | TokenKind::EntryOpen = unsafe { mem::transmute(*payload.get_unchecked(0)) }
                 {
                     self.reader.seek(4)?; // align to 8
                 };
@@ -313,12 +323,18 @@ impl<'a> Iter<'a> {
                     data: self.reader.read_bytes(len)?,
                 }
             }
-            TokenKind::StructOpen => Token::StructOpen,
+            TokenKind::StructOpen => {
+                self.reader.align_to(8)?;
+                Token::StructOpen
+            },
+            TokenKind::EntryOpen => {
+                self.reader.align_to(8)?;
+                Token::EntryOpen
+            },
             TokenKind::StructClose => Token::StructClose,
-            TokenKind::EntryOpen => Token::EntryOpen,
             TokenKind::EntryClose => Token::EntryClose,
             TokenKind::Variant => {
-                let sig = self.reader.next_unchecked::<&strings::Signature>()?;
+                let sig = self.reader.read::<&strings::Signature>()?;
                 let mut sig = SignatureIter::new(sig);
                 mem::swap(&mut sig, &mut self.signature);
                 self.nesting_stack
@@ -337,6 +353,26 @@ impl<'a> Iter<'a> {
     }
 }
 
+impl<'a> Iterator for Iter<'a> {
+    type Item = Result<Token<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next()
+    }
+}
+
+// struct ArrayIter<'a> {
+//     signature: &'a [u8],
+//     data: &'a [u8],
+// }
+//
+// impl<'a> Iterator for ArrayIter<'a> {
+//     type Item = Option<Iter<'a>>;
+//     fn next(&mut self) -> Option<Self::Item> {
+//         let
+//     }
+// }
+
 #[test]
 fn test_iter() {
     let data = [
@@ -345,8 +381,32 @@ fn test_iter() {
     ];
     let mut it = Iter::new(b"a{yv}", &data);
     while let Some(x) = it.next() {
-        dbg!(&x);
-        x.unwrap();
+        match x.unwrap() {
+            Token::Array {
+                signature,
+                mut data,
+            } => {
+                let mut padding = 0;
+                let sig: TokenKind = unsafe { mem::transmute(*signature.get_unchecked(0)) };
+                let align = sig.alignment();
+                loop {
+                    data = &data[padding..];
+                    let mut it = Iter::new(signature, data);
+                    dbg!(data);
+                    while let Some(x) = it.next() {
+                        dbg!(x.unwrap());
+                    }
+                    data = it.reader.rest_bytes();
+                    padding = crate::align_padding(it.reader.count, align);
+                    if data.is_empty() {
+                        break;
+                    }
+                }
+            }
+            x => {
+                dbg!(x);
+            }
+        }
     }
     // panic!()
 }

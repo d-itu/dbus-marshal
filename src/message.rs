@@ -1,29 +1,38 @@
 use core::{
     fmt::{self, Formatter},
+    mem,
     num::NonZeroU32,
 };
-
-use zerocopy::{FromBytes, Immutable, KnownLayout, TryFromBytes, Unaligned};
 
 use crate::{
     marshal::{self, Marshal},
     strings,
     types::Variant,
-    unmarshal,
+    unmarshal::{self, Error, Unmarshal},
 };
 
-#[derive(Debug, Clone, Copy, TryFromBytes, Unaligned, PartialEq, Immutable)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum Endian {
     Little = b'l',
     Big = b'B',
 }
 
-#[derive(Clone, Copy, TryFromBytes, Unaligned, PartialEq, Immutable)]
-#[repr(u8)]
-pub enum Version {
-    V1 = 1,
+impl Endian {
+    const fn from_u8(x: u8) -> unmarshal::Result<Self> {
+        Ok(match x {
+            b'l' => Self::Little,
+            b'B' => Self::Big,
+            _ => Err(Error::InvalidHeader)?,
+        })
+    }
 }
+
+// #[derive(Clone, Copy, PartialEq)]
+// #[repr(u8)]
+// pub enum Version {
+//     V1 = 1,
+// }
 
 #[cfg(target_endian = "little")]
 const NATIVE_ENDIAN: Endian = Endian::Little;
@@ -31,7 +40,7 @@ const NATIVE_ENDIAN: Endian = Endian::Little;
 #[cfg(target_endian = "big")]
 const NATIVE_ENDIAN: Endian = Endian::Big;
 
-#[derive(Debug, Clone, Copy, TryFromBytes, Unaligned, Immutable)]
+#[derive(Debug, Clone, Copy)]
 #[repr(u8)]
 pub enum MessageType {
     MethodCall = 1,
@@ -40,7 +49,16 @@ pub enum MessageType {
     Signal = 4,
 }
 
-#[derive(Clone, Copy, FromBytes, Unaligned, Immutable)]
+impl MessageType {
+    const fn from_u8(x: u8) -> unmarshal::Result<Self> {
+        if x < 1 || x > 4 {
+            Err(Error::InvalidHeader)?
+        }
+        Ok(unsafe { mem::transmute(x) })
+    }
+}
+
+#[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct Flags(u8);
 
@@ -103,6 +121,20 @@ macro_rules! define_fields {
                 })*
             }
         }
+
+        impl<'a> Unmarshal<'a> for Fields<'a> {
+            fn unmarshal(r: &mut unmarshal::Reader<'a>) -> unmarshal::Result<Self> {
+                let mut result = Self::default();
+                $(
+                    let id: u8 = r.read()?;
+                    if id == $id {
+                        let v: crate::Variant<_> = r.read()?;
+                        result.$field = Some(v.0);
+                    }
+                )*
+                Ok(result)
+            }
+        }
     };
 }
 
@@ -131,23 +163,16 @@ pub struct Message<'a, T> {
     body: T,
 }
 
-#[repr(C)]
-#[derive(TryFromBytes, KnownLayout, Immutable)]
-struct Fixed {
-    endian: Endian,
-    message_type: MessageType,
-    flags: Flags,
-    version: Version,
-    body_len: u32,
-    serial: NonZeroU32,
-}
-
-impl<'a> Fields<'a> {
-    fn from_data(data: &'a [u8]) -> unmarshal::Result<(Self, &'a [u8])> {
-        todo!()
-    }
-}
-
+// #[repr(C)]
+// struct Fixed {
+//     endian: Endian,
+//     message_type: MessageType,
+//     flags: Flags,
+//     version: Version,
+//     body_len: u32,
+//     serial: NonZeroU32,
+// }
+//
 // impl<'a> Message<'a, Option<unmarshal::Iterator<'a>>> {
 //     pub fn from_data(data: &'a [u8]) -> unmarshal::Result<(Self, &'a [u8])> {
 //         let begin = data.len();
@@ -216,6 +241,56 @@ impl<T: [const] Marshal> const Marshal for &Message<'_, T> {
         body.marshal(w);
         let body_len = w.position() - body_begin;
         w.insert(body_len as u32, body_len_insertion);
+    }
+}
+
+impl<'a> Unmarshal<'a> for Message<'a, &'a [u8]> {
+    fn unmarshal(r: &mut unmarshal::Reader<'a>) -> unmarshal::Result<Self> {
+        let _endian = r.read_byte().and_then(Endian::from_u8)?;
+        let message_type = r.read_byte().and_then(MessageType::from_u8)?;
+        let flags = r.read_byte().map(Flags)?;
+        let _version = r.read_byte()?;
+        let body_len: u32 = r.read()?;
+        let serial = r.read()?;
+        let serial = NonZeroU32::new(serial).ok_or(Error::InvalidHeader)?;
+        let fields = r.read()?;
+        let header = Header {
+            message_type,
+            flags,
+            serial,
+            fields,
+        };
+        r.align_to(8)?;
+        let body_len = body_len as usize;
+        let body = r.rest_bytes().get(body_len..).ok_or(Error::NotEnoughData)?;
+        r.seek(body_len)?;
+        Ok(Self { header, body })
+    }
+}
+
+pub struct MessageIterator<'a> {
+    reader: unmarshal::Reader<'a>,
+}
+
+impl<'a> MessageIterator<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
+        Self {
+            reader: unmarshal::Reader::new(data),
+        }
+    }
+    pub fn next(&mut self) -> Option<unmarshal::Result<Message<'a, &'a [u8]>>> {
+        if self.reader.rest_bytes().is_empty() {
+            None?;
+        }
+        Some(self.reader.read())
+    }
+}
+
+impl<'a> Iterator for MessageIterator<'a> {
+    type Item = unmarshal::Result<Message<'a, &'a [u8]>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next()
     }
 }
 

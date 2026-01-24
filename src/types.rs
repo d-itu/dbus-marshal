@@ -56,7 +56,7 @@ mod private {
 }
 pub(crate) use private::StructConstructor;
 
-#[derive(Clone, Copy)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Empty;
 impl StructConstructor for Empty {}
 unsafe impl MultiSignature for Empty {
@@ -64,7 +64,7 @@ unsafe impl MultiSignature for Empty {
     const DATA: Self::Data = ();
 }
 
-#[derive(Clone, Copy)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Append<Xs, X>(pub Xs, pub X);
 impl<X, Xs: StructConstructor> StructConstructor for Append<X, Xs> {}
 unsafe impl<X: Signature, Xs: MultiSignature> MultiSignature for Append<X, Xs> {
@@ -123,31 +123,55 @@ macro_rules! struct_new {
 }
 
 #[macro_export]
-macro_rules! signature_bytes_static {
+macro_rules! struct_constructor_match {
+    ($x:pat, $($xs:pat),* $(,)?) => {
+        crate::types::Append($x, crate::struct_constructor_match!($($xs),*))
+    };
+    ($x:pat $(,)?) => {
+        crate::types::Append($x, crate::types::Empty)
+    };
+    () => {
+        crate::types::Empty
+    };
+}
+
+#[macro_export]
+macro_rules! struct_match {
+    ($($xs:pat),* $(,)? ) => {
+        crate::types::Struct(crate::struct_constructor_match!($($xs),*))
+    };
+}
+
+#[macro_export]
+macro_rules! signature_static {
     ($x:ty) => {{
         type Data = <$x as crate::signature::MultiSignature>::Data;
         static_assertions::assert_eq_align!(Data, u8);
         const DATA: Data = <$x as crate::signature::MultiSignature>::DATA;
         let result: &[u8; core::mem::size_of::<Data>()] = unsafe { core::mem::transmute(&DATA) };
-        result
+        crate::strings::Signature::from_bytes(result)
     }};
 }
 
 #[macro_export]
-macro_rules! signature_bytes {
+macro_rules! signature {
     ($x:ty) => {{
         let data = <$x as crate::signature::MultiSignature>::DATA;
         let ptr = &data as *const _ as *const u8;
         let len = core::mem::size_of_val(&data);
-        unsafe { core::slice::from_raw_parts(ptr, len) }
+        crate::strings::Signature::from_bytes(unsafe { core::slice::from_raw_parts(ptr, len) })
     }};
 }
 
 #[test]
-const fn test_signature() {
-    static_assertions::const_assert!(match signature_bytes_static!(T) {
+fn test_signature() {
+    static_assertions::const_assert!(match signature_static!(T).as_bytes() {
         b"(yun)" => true,
         _ => false,
     });
     type T = struct_type!(u8, u32, i16);
+    const XS: struct_type!(i32, f32, u8) = struct_new!(1i32, 2.0, 2u8);
+    let struct_match!(x, _, z) = XS;
+    assert_eq!(x, 1);
+    assert_eq!(z, 2);
 }

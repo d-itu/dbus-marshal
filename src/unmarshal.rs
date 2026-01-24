@@ -1,16 +1,15 @@
 use core::{marker::PhantomData, result, slice};
 
-use crate::{aligned, strings};
+use crate::{aligned, signature::Signature, strings, types::*};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Error {
     SignatureInvalidChar,
+    UnexpectedType,
     InvalidEntrySize,
     NestingMismatched,
     NotEnoughData,
-    RedundantData,
     InvalidHeader,
-    UnsupportedEndian,
     NestingDepthExceeded,
 }
 
@@ -40,6 +39,7 @@ impl<'a> Reader<'a> {
         if self.count + n > self.len {
             Err(Error::NotEnoughData)?;
         }
+        self.seek_unchecked(n);
         Ok(())
     }
     fn aligned(&self, align: usize) -> Result<usize> {
@@ -56,16 +56,21 @@ impl<'a> Reader<'a> {
     pub fn rest_bytes(&self) -> &'a [u8] {
         unsafe { slice::from_raw_parts(self.begin.add(self.count), self.len - self.count) }
     }
-    pub fn next_unchecked<T: Unmarshal<'a>>(&mut self) -> Result<T> {
-        T::next_unchecked(self)
+    pub fn read<T: Unmarshal<'a>>(&mut self) -> Result<T> {
+        T::unmarshal(self)
     }
-    fn read_bytes(&mut self, len: usize) -> Result<&'a [u8]> {
+    pub fn read_byte(&mut self) -> Result<u8> {
+        let res = *self.rest_bytes().get(1).ok_or(Error::NotEnoughData)?;
+        self.seek_unchecked(1);
+        Ok(res)
+    }
+    pub fn read_bytes(&mut self, len: usize) -> Result<&'a [u8]> {
         let res = self.rest_bytes().get(..len).ok_or(Error::NotEnoughData)?;
         self.seek_unchecked(len);
         Ok(res)
     }
     fn next_string_like(&mut self) -> Result<&'a [u8]> {
-        let len = self.next_unchecked::<u32>()? as usize;
+        let len = self.read::<u32>()? as usize;
         let res = self.rest_bytes().get(..len).ok_or(Error::NotEnoughData)?;
         self.seek_unchecked(len + 1); // sentinel 0
         Ok(res)
@@ -74,13 +79,13 @@ impl<'a> Reader<'a> {
 
 pub trait Unmarshal<'a>: Sized {
     /// read without checking signature
-    fn next_unchecked(r: &mut Reader<'a>) -> Result<Self>;
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self>;
 }
 
 macro_rules! impl_unmarshal {
     ($($t: ty),* $(,)?) => {
         $(impl Unmarshal<'_> for $t {
-            fn next_unchecked(r: &mut Reader) -> Result<Self> {
+            fn unmarshal(r: &mut Reader) -> Result<Self> {
                 r.align_to(core::mem::align_of::<Self>())?;
                 let bytes = r
                     .rest_bytes()
@@ -97,26 +102,26 @@ macro_rules! impl_unmarshal {
 impl_unmarshal!(u8, i16, u16, i32, u32, i64, u64, f64);
 
 impl Unmarshal<'_> for bool {
-    fn next_unchecked(r: &mut Reader) -> Result<Self> {
-        u32::next_unchecked(r).map(|x| x != 0)
+    fn unmarshal(r: &mut Reader) -> Result<Self> {
+        u32::unmarshal(r).map(|x| x != 0)
     }
 }
 
 impl<'a> Unmarshal<'a> for &'a strings::String {
-    fn next_unchecked(r: &mut Reader<'a>) -> Result<Self> {
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
         r.next_string_like().map(strings::String::from_bytes)
     }
 }
 
 impl<'a> Unmarshal<'a> for &'a strings::ObjectPath {
-    fn next_unchecked(r: &mut Reader<'a>) -> Result<Self> {
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
         r.next_string_like().map(strings::ObjectPath::from_bytes)
     }
 }
 
 impl<'a> Unmarshal<'a> for &'a strings::Signature {
-    fn next_unchecked(r: &mut Reader<'a>) -> Result<Self> {
-        let len = r.next_unchecked::<u8>()? as usize;
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
+        let len = r.read::<u8>()? as usize;
         let res = r
             .rest_bytes()
             .get(..len)
@@ -124,6 +129,42 @@ impl<'a> Unmarshal<'a> for &'a strings::Signature {
             .map(strings::Signature::from_bytes)?;
         r.seek_unchecked(len + 1);
         Ok(res)
+    }
+}
+
+impl<'a, T: Unmarshal<'a> + Signature> Unmarshal<'a> for Variant<T> {
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
+        let sig: &strings::Signature = r.read()?;
+        if sig != crate::signature!(T) {
+            Err(Error::UnexpectedType)?
+        }
+        Ok(r.read()?)
+    }
+}
+
+impl<'a, K: Unmarshal<'a>, V: Unmarshal<'a>> Unmarshal<'a> for Entry<K, V> {
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
+        r.align_to(8)?;
+        Ok(Self(K::unmarshal(r)?, V::unmarshal(r)?))
+    }
+}
+
+impl Unmarshal<'_> for Empty {
+    fn unmarshal(_: &mut Reader<'_>) -> Result<Self> {
+        Ok(Empty)
+    }
+}
+
+impl<'a, Xs: Unmarshal<'a>, X: Unmarshal<'a>> Unmarshal<'a> for Append<Xs, X> {
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
+        Ok(Self(Xs::unmarshal(r)?, X::unmarshal(r)?))
+    }
+}
+
+impl<'a, T: Unmarshal<'a> + StructConstructor> Unmarshal<'a> for Struct<T> {
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
+        r.align_to(8)?;
+        Ok(Self(T::unmarshal(r)?))
     }
 }
 
