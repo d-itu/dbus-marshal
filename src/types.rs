@@ -85,81 +85,81 @@ unsafe impl<T: MultiSignature + StructConstructor> Signature for Struct<T> {
 #[macro_export]
 macro_rules! struct_constructor {
     ($x:ty, $($xs:ty),* $(,)?) => {
-        crate::types::Append<$x, crate::struct_constructor!($($xs),*)>
+        $crate::types::Append<$x, $crate::struct_constructor!($($xs),*)>
     };
     ($x:ty $(,)?) => {
-        crate::types::Append<$x, crate::types::Empty>
+        $crate::types::Append<$x, $crate::types::Empty>
     };
     () => {
-        crate::types::Empty
+        $crate::types::Empty
     };
 }
 
 #[macro_export]
 macro_rules! struct_type {
     ($($xs:ty),* $(,)? ) => {
-        crate::types::Struct<crate::struct_constructor!($($xs),*)>
+        $crate::types::Struct<$crate::struct_constructor!($($xs),*)>
     };
 }
 
 #[macro_export]
 macro_rules! struct_constructor_new {
     ($x:expr, $($xs:expr),* $(,)?) => {
-        crate::types::Append($x, crate::struct_constructor_new!($($xs),*))
+        $crate::types::Append($x, $crate::struct_constructor_new!($($xs),*))
     };
     ($x:expr $(,)?) => {
-        crate::types::Append($x, crate::types::Empty)
+        $crate::types::Append($x, $crate::types::Empty)
     };
     () => {
-        crate::types::Empty
+        $crate::types::Empty
     };
 }
 
 #[macro_export]
 macro_rules! struct_new {
     ($($xs:expr),* $(,)? ) => {
-        crate::types::Struct(crate::struct_constructor_new!($($xs),*))
+        $crate::types::Struct($crate::struct_constructor_new!($($xs),*))
     };
 }
 
 #[macro_export]
 macro_rules! struct_constructor_match {
     ($x:pat, $($xs:pat),* $(,)?) => {
-        crate::types::Append($x, crate::struct_constructor_match!($($xs),*))
+        $crate::types::Append($x, $crate::struct_constructor_match!($($xs),*))
     };
     ($x:pat $(,)?) => {
-        crate::types::Append($x, crate::types::Empty)
+        $crate::types::Append($x, $crate::types::Empty)
     };
     () => {
-        crate::types::Empty
+        $crate::types::Empty
     };
 }
 
 #[macro_export]
 macro_rules! struct_match {
     ($($xs:pat),* $(,)? ) => {
-        crate::types::Struct(crate::struct_constructor_match!($($xs),*))
+        $crate::types::Struct($crate::struct_constructor_match!($($xs),*))
     };
 }
 
 #[macro_export]
 macro_rules! signature_static {
     ($x:ty) => {{
-        type Data = <$x as crate::signature::MultiSignature>::Data;
+        type Data = <$x as $crate::signature::MultiSignature>::Data;
         static_assertions::assert_eq_align!(Data, u8);
-        const DATA: Data = <$x as crate::signature::MultiSignature>::DATA;
+        const DATA: Data = <$x as $crate::signature::MultiSignature>::DATA;
         let result: &[u8; core::mem::size_of::<Data>()] = unsafe { core::mem::transmute(&DATA) };
-        crate::strings::Signature::from_bytes(result)
+        $crate::strings::Signature::from_bytes(result)
     }};
 }
 
 #[macro_export]
 macro_rules! signature {
     ($x:ty) => {{
-        let data = <$x as crate::signature::MultiSignature>::DATA;
+        let data = <$x as $crate::signature::MultiSignature>::DATA;
         let ptr = &data as *const _ as *const u8;
         let len = core::mem::size_of_val(&data);
-        crate::strings::Signature::from_bytes(unsafe { core::slice::from_raw_parts(ptr, len) })
+        $crate::strings::Signature::from_bytes(unsafe { core::slice::from_raw_parts(ptr, len) })
     }};
 }
 

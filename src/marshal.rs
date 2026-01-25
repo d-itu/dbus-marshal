@@ -155,9 +155,9 @@ pub const fn write<Value: [const] Marshal>(
 #[macro_export]
 macro_rules! marshal_const {
     ($vis:vis const $iden:ident = $expr:expr) => {
-        $vis const $iden: [u8; crate::marshal::calc_size($expr)] = {
-            let mut buf = [0; crate::marshal::calc_size($expr)];
-            unsafe { crate::marshal::write_unchecked($expr, buf.as_mut_ptr() as _) };
+        $vis const $iden: [u8; $crate::marshal::calc_size($expr)] = {
+            let mut buf = [0; $crate::marshal::calc_size($expr)];
+            unsafe { $crate::marshal::write_unchecked($expr, buf.as_mut_ptr() as _) };
             buf
         };
     };
