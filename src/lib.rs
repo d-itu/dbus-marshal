@@ -1,10 +1,11 @@
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![feature(
     const_array,
-    const_convert,
     const_cmp,
+    const_convert,
     const_destruct,
     const_index,
+    const_option_ops,
     const_trait_impl,
     const_try,
     slice_from_ptr_range,

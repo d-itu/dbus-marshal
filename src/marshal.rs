@@ -1,3 +1,5 @@
+use core::{mem::MaybeUninit, slice};
+
 use crate::{marshal::writer::*, signature::Signature, strings, types::*};
 
 pub const trait Marshal: Copy {
@@ -135,6 +137,19 @@ pub const fn calc_size<Value: [const] Marshal>(value: Value) -> usize {
 pub const unsafe fn write_unchecked<Value: [const] Marshal>(value: Value, ptr: *mut u8) {
     let mut writer = Span::new(ptr);
     value.marshal(&mut writer);
+}
+
+pub const fn write<Value: [const] Marshal>(
+    value: Value,
+    buf: &[MaybeUninit<u8>],
+) -> Result<(&[u8], &[MaybeUninit<u8>]), ()> {
+    let size = calc_size(value);
+    let (write, remaining) = buf.split_at_checked(size).ok_or(())?;
+    unsafe {
+        write_unchecked(value, write.as_ptr() as _);
+        let write = slice::from_raw_parts(write.as_ptr() as _, write.len());
+        Ok((write, remaining))
+    }
 }
 
 #[macro_export]
