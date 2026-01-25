@@ -1,7 +1,9 @@
 use core::{marker::PhantomData, mem, result, slice};
 
+use arrayvec::ArrayVec;
+
 use crate::{
-    ArrayVec, strings,
+    strings,
     unmarshal::{Error, Reader},
 };
 
@@ -397,7 +399,7 @@ fn test_iter() {
                     while let Some(x) = it.next() {
                         dbg!(x.unwrap());
                     }
-                    data = it.reader.rest_bytes();
+                    data = it.reader.remaining();
                     padding = crate::align_padding(it.reader.count, align);
                     if data.is_empty() {
                         break;

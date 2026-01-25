@@ -270,7 +270,7 @@ impl<'a> Unmarshal<'a> for Message<'a, &'a [u8]> {
         };
         r.align_to(8)?;
         let body_len = body_len as usize;
-        let body = r.rest_bytes().get(body_len..).ok_or(Error::NotEnoughData)?;
+        let body = r.remaining().get(body_len..).ok_or(Error::NotEnoughData)?;
         r.seek(body_len)?;
         Ok(Self { header, body })
     }
@@ -287,12 +287,12 @@ impl<'a> MessageIterator<'a> {
         }
     }
     pub fn next(&mut self) -> Option<unmarshal::Result<Message<'a, &'a [u8]>>> {
-        if self.reader.rest_bytes().is_empty() {
+        if self.reader.remaining().is_empty() {
             None?;
         }
         match self.reader.read() {
             Ok(x) => {
-                self.reader = unmarshal::Reader::new(self.reader.rest_bytes());
+                self.reader = unmarshal::Reader::new(self.reader.remaining());
                 Some(Ok(x))
             }
             Err(e) => Some(Err(e)),

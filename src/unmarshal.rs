@@ -58,25 +58,25 @@ impl<'a> Reader<'a> {
         self.count = self.aligned(align)?;
         Ok(())
     }
-    pub fn rest_bytes(&self) -> &'a [u8] {
+    pub fn remaining(&self) -> &'a [u8] {
         unsafe { slice::from_raw_parts(self.begin.add(self.count), self.len - self.count) }
     }
     pub fn read<T: Unmarshal<'a>>(&mut self) -> Result<T> {
         T::unmarshal(self)
     }
     pub fn read_byte(&mut self) -> Result<u8> {
-        let res = *self.rest_bytes().get(0).ok_or(Error::NotEnoughData)?;
+        let res = *self.remaining().get(0).ok_or(Error::NotEnoughData)?;
         self.seek_unchecked(1);
         Ok(res)
     }
     pub fn read_bytes(&mut self, len: usize) -> Result<&'a [u8]> {
-        let res = self.rest_bytes().get(..len).ok_or(Error::NotEnoughData)?;
+        let res = self.remaining().get(..len).ok_or(Error::NotEnoughData)?;
         self.seek_unchecked(len);
         Ok(res)
     }
     fn next_string_like(&mut self) -> Result<&'a [u8]> {
         let len = self.read::<u32>()? as usize;
-        let res = self.rest_bytes().get(..len).ok_or(Error::NotEnoughData)?;
+        let res = self.remaining().get(..len).ok_or(Error::NotEnoughData)?;
         self.seek_unchecked(len + 1); // sentinel 0
         Ok(res)
     }
@@ -93,7 +93,7 @@ macro_rules! impl_unmarshal {
             fn unmarshal(r: &mut Reader) -> Result<Self> {
                 r.align_to(core::mem::align_of::<Self>())?;
                 let bytes = r
-                    .rest_bytes()
+                    .remaining()
                     .get(..core::mem::size_of::<Self>())
                     .ok_or(Error::NotEnoughData)?;
                 let res = Self::from_ne_bytes(bytes.as_array().copied().unwrap());
@@ -128,7 +128,7 @@ impl<'a> Unmarshal<'a> for &'a strings::Signature {
     fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
         let len = r.read::<u8>()? as usize;
         let res = r
-            .rest_bytes()
+            .remaining()
             .get(..len)
             .ok_or(Error::NotEnoughData)
             .map(strings::Signature::from_bytes)?;
@@ -181,7 +181,7 @@ pub struct ArrayIter<'a, T> {
 
 impl<'a, T: Signature + Unmarshal<'a>> ArrayIter<'a, T> {
     fn next(&mut self) -> iter::IterResult<T> {
-        if self.reader.rest_bytes().is_empty() {
+        if self.reader.remaining().is_empty() {
             Err(iter::IterErr::EndOfIteration)?
         }
         self.reader.align_to(T::ALIGNMENT)?;
