@@ -274,9 +274,15 @@ impl<'a> Unmarshal<'a> for Message<'a, &'a [u8]> {
         };
         r.align_to(8)?;
         let body_len = body_len as usize;
-        let body = r.remaining().get(body_len..).ok_or(Error::NotEnoughData)?;
+        let body = r.remaining().get(..body_len).ok_or(Error::NotEnoughData)?;
         r.seek(body_len)?;
         Ok(Self { header, body })
+    }
+}
+
+impl<'a> Message<'a, &'a [u8]> {
+    pub fn from_bytes(data: &'a [u8]) -> unmarshal::Result<Self> {
+        Self::unmarshal(&mut unmarshal::Reader::new(data))
     }
 }
 

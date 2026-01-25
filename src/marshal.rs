@@ -142,12 +142,12 @@ pub const unsafe fn write_unchecked<Value: [const] Marshal>(value: Value, ptr: *
 pub const fn write<Value: [const] Marshal>(
     value: Value,
     buf: &mut [MaybeUninit<u8>],
-) -> Result<(&[u8], &[MaybeUninit<u8>]), ()> {
+) -> Result<(&mut [u8], &mut [MaybeUninit<u8>]), ()> {
     let size = calc_size(value);
-    let (write, remaining) = buf.split_at_checked(size).ok_or(())?;
+    let (write, remaining) = buf.split_at_mut_checked(size).ok_or(())?;
     unsafe {
         write_unchecked(value, write.as_ptr() as _);
-        let write = slice::from_raw_parts(write.as_ptr() as _, write.len());
+        let write = slice::from_raw_parts_mut(write.as_ptr() as _, write.len());
         Ok((write, remaining))
     }
 }
