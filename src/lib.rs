@@ -1,5 +1,6 @@
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![feature(
+    const_convert,
     const_destruct,
     const_index,
     const_trait_impl,
@@ -11,7 +12,10 @@
 pub mod marshal;
 pub mod unmarshal;
 
-use core::mem::MaybeUninit;
+use core::{
+    fmt::{self, Debug},
+    mem::MaybeUninit,
+};
 
 pub use message::*;
 pub use strings::*;
@@ -87,4 +91,17 @@ impl<T, const N: usize> ArrayVec<T, N> {
                 .assume_init_mut()
         })
     }
+}
+
+#[allow(dead_code)]
+fn show_bytes(xs: &[u8]) -> impl Debug {
+    fmt::from_fn(move |f| {
+        Ok(for &x in xs {
+            if x.is_ascii_graphic() {
+                write!(f, "{}", x as char)?;
+            } else {
+                write!(f, "\\{x}")?;
+            }
+        })
+    })
 }

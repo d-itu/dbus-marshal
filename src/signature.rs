@@ -25,28 +25,36 @@ pub struct Triple<X, Y, Z>(pub X, pub Y, pub Z);
 #[derive(Clone, Copy)]
 pub struct Quadruple<X, Y, Z, W>(pub X, pub Y, pub Z, pub W);
 
+pub trait SignatureProxy {
+    type Proxy: MultiSignature + ?Sized;
+}
+
 pub unsafe trait MultiSignature {
     type Data: Node;
     const DATA: Self::Data;
 }
 
-unsafe impl<T: MultiSignature + ?Sized> MultiSignature for &T {
-    type Data = T::Data;
-    const DATA: Self::Data = T::DATA;
+unsafe impl<T: SignatureProxy + ?Sized> MultiSignature for T {
+    type Data = <T::Proxy as MultiSignature>::Data;
+    const DATA: Self::Data = T::Proxy::DATA;
+}
+
+impl<T: MultiSignature + ?Sized> SignatureProxy for &T {
+    type Proxy = T;
 }
 
 pub unsafe trait Signature: MultiSignature {
-    const ALIGN: usize;
+    const ALIGNMENT: usize;
 }
 
 unsafe impl<T: Signature + ?Sized> Signature for &T {
-    const ALIGN: usize = T::ALIGN;
+    const ALIGNMENT: usize = T::ALIGNMENT;
 }
 
 macro_rules! impl_signature {
     ($($t:ty = $s:literal),* $(,)?) => {
         $(unsafe impl Signature for $t {
-            const ALIGN: usize = core::mem::align_of::<Self>();
+            const ALIGNMENT: usize = core::mem::align_of::<Self>();
         })*
         $(unsafe impl MultiSignature for $t {
             type Data = u8;
@@ -72,7 +80,7 @@ unsafe impl MultiSignature for bool {
     const DATA: Self::Data = b'b';
 }
 unsafe impl Signature for bool {
-    const ALIGN: usize = 4;
+    const ALIGNMENT: usize = 4;
 }
 
 unsafe impl MultiSignature for strings::String {
@@ -80,7 +88,7 @@ unsafe impl MultiSignature for strings::String {
     const DATA: Self::Data = b's';
 }
 unsafe impl Signature for strings::String {
-    const ALIGN: usize = 4;
+    const ALIGNMENT: usize = 4;
 }
 
 unsafe impl MultiSignature for strings::Signature {
@@ -88,7 +96,7 @@ unsafe impl MultiSignature for strings::Signature {
     const DATA: Self::Data = b'g';
 }
 unsafe impl Signature for strings::Signature {
-    const ALIGN: usize = 1;
+    const ALIGNMENT: usize = 1;
 }
 
 unsafe impl MultiSignature for strings::ObjectPath {
@@ -96,5 +104,5 @@ unsafe impl MultiSignature for strings::ObjectPath {
     const DATA: Self::Data = b'o';
 }
 unsafe impl Signature for strings::ObjectPath {
-    const ALIGN: usize = 4;
+    const ALIGNMENT: usize = 4;
 }

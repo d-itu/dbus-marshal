@@ -25,7 +25,7 @@ macro_rules! impl_string {
                 <$t>::from_bytes(bytes.as_bytes())
             }
         }
-        impl Deref for $t {
+        impl const Deref for $t {
             type Target = [u8];
 
             fn deref(&self) -> &Self::Target {
@@ -38,17 +38,17 @@ macro_rules! impl_string {
                 write!(f, "{s:?}")
             }
         }
-        impl<'a> From<&'a str> for &'a $t {
+        impl<'a> const From<&'a str> for &'a $t {
             fn from(s: &'a str) -> Self {
                 <$t>::from_str(s)
             }
         }
-        impl<'a> From<&'a [u8]> for &'a $t {
+        impl<'a> const From<&'a [u8]> for &'a $t {
             fn from(s: &'a [u8]) -> Self {
                 <$t>::from_bytes(s)
             }
         }
-        impl AsRef<[u8]> for $t {
+        impl const AsRef<[u8]> for $t {
             fn as_ref(&self) -> &[u8] {
                 self.as_bytes()
             }

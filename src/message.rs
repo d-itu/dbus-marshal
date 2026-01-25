@@ -1,4 +1,5 @@
 use core::{
+    convert::Infallible,
     fmt::{self, Formatter},
     mem,
     num::NonZeroU32,
@@ -6,8 +7,9 @@ use core::{
 
 use crate::{
     marshal::{self, Marshal},
+    signature::{Signature, SignatureProxy},
     strings,
-    types::Variant,
+    types::{self, Variant},
     unmarshal::{self, Error, Unmarshal},
 };
 
@@ -28,19 +30,13 @@ impl Endian {
     }
 }
 
-// #[derive(Clone, Copy, PartialEq)]
-// #[repr(u8)]
-// pub enum Version {
-//     V1 = 1,
-// }
-
 #[cfg(target_endian = "little")]
 const NATIVE_ENDIAN: Endian = Endian::Little;
 
 #[cfg(target_endian = "big")]
 const NATIVE_ENDIAN: Endian = Endian::Big;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum MessageType {
     MethodCall = 1,
@@ -58,7 +54,7 @@ impl MessageType {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Flags(u8);
 
@@ -98,13 +94,18 @@ impl core::fmt::Debug for Flags {
 
 macro_rules! define_fields {
     ($($id:literal $field:ident: $type:ty),* $(,)?) => {
-        #[derive(Default, Debug, Clone, Copy)]
+        #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
         pub struct Fields<'a> {
             $(pub $field: Option<$type>,)*
         }
 
         impl<'a> Fields<'a> {
-            $(pub fn $field(self, value: impl Into<$type>) -> Self {
+            pub const fn empty() -> Self {
+                Self {
+                    $($field: None,)*
+                }
+            }
+            $(pub const fn $field(self, value: impl [const] Into<$type>) -> Self {
                 Self {
                     $field: Some(value.into()),
                     ..self
@@ -122,35 +123,94 @@ macro_rules! define_fields {
             }
         }
 
+        impl<'a> Unmarshal<'a> for Entry<'a> {
+            fn unmarshal(r: &mut unmarshal::Reader<'a>) -> unmarshal::Result<Self> {
+                let id: u8 = r.read()?;
+                match id {
+                    $($id => {
+                        let value: Variant<$type> = r.read()?;
+
+                        let field = value.0.into();
+                        Ok(Entry { id, field })
+                    })*
+                    _ => Err(Error::InvalidHeader)?,
+                }
+            }
+        }
+
         impl<'a> Unmarshal<'a> for Fields<'a> {
             fn unmarshal(r: &mut unmarshal::Reader<'a>) -> unmarshal::Result<Self> {
-                let mut result = Self::default();
-                $(
-                    let id: u8 = r.read()?;
-                    if id == $id {
-                        let v: crate::Variant<_> = r.read()?;
-                        result.$field = Some(v.0);
+                let mut result = Self::empty();
+                let iter: unmarshal::ArrayIter<Entry> = r.read()?;
+                for x in iter {
+                    let Entry { id, field } = x?;
+                    match id {
+                        $($id => {
+                            result = result.$field(field);
+                        })*
+                        _ => {}
                     }
-                )*
+                }
                 Ok(result)
             }
         }
     };
 }
 
+macro_rules! define_field {
+    ($($name:ident: $type:ty),* $(,)?) => {
+        union Field<'a> {
+            $($name: $type,)*
+        }
+
+        $(
+            impl<'a> From<$type> for Field<'a> {
+                fn from(value: $type) -> Self {
+                    Self { $name: value }
+                }
+            }
+            impl<'a> Into<$type> for Field<'a> {
+                fn into(self) -> $type {
+                    unsafe { self.$name }
+                }
+            }
+        )*
+    };
+}
+
+define_field!(
+    object: &'a strings::ObjectPath,
+    string: &'a strings::String,
+    signature: &'a strings::Signature,
+    u32: u32,
+);
+
+struct Entry<'a> {
+    id: u8,
+    field: Field<'a>,
+}
+
+impl SignatureProxy for Entry<'_> {
+    type Proxy = types::Entry<u8, types::Variant<Infallible>>;
+}
+
+unsafe impl Signature for Entry<'_> {
+    const ALIGNMENT: usize = 8;
+}
+
 define_fields! {
-    7 sender: &'a strings::String,
-    6 destination: &'a strings::String,
     1 path: &'a strings::ObjectPath,
     2 interface: &'a strings::String,
     3 member: &'a strings::String,
-    8 signature: &'a strings::Signature,
     4 error_name: &'a strings::String,
     5 reply_serial: u32,
+    6 destination: &'a strings::String,
+    7 sender: &'a strings::String,
+    8 signature: &'a strings::Signature,
     9 unix_fds: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Header<'a> {
     pub message_type: MessageType,
     pub flags: Flags,
@@ -162,61 +222,6 @@ pub struct Message<'a, T> {
     header: Header<'a>,
     body: T,
 }
-
-// #[repr(C)]
-// struct Fixed {
-//     endian: Endian,
-//     message_type: MessageType,
-//     flags: Flags,
-//     version: Version,
-//     body_len: u32,
-//     serial: NonZeroU32,
-// }
-//
-// impl<'a> Message<'a, Option<unmarshal::Iterator<'a>>> {
-//     pub fn from_data(data: &'a [u8]) -> unmarshal::Result<(Self, &'a [u8])> {
-//         let begin = data.len();
-//         let (
-//             Fixed {
-//                 endian,
-//                 message_type,
-//                 flags,
-//                 body_len,
-//                 serial,
-//                 ..
-//             },
-//             data,
-//         ) = Fixed::try_read_from_prefix(data).map_err(|e| match e {
-//             ConvertError::Size(_) => Error::NotEnoughData,
-//             ConvertError::Validity(_) => Error::InvalidHeader,
-//         })?;
-//         if endian != NATIVE_ENDIAN {
-//             Err(Error::UnsupportEndian)?
-//         }
-//         let (fields, data) = Fields::from_data(data)?;
-//         let position = begin - data.len();
-//         let padding = crate::aligned(position, 8) - position;
-//         let data = data.get(padding..).ok_or(Error::NotEnoughData)?;
-//         let (data, rest) = data
-//             .split_at_checked(body_len as _)
-//             .ok_or(Error::NotEnoughData)?;
-//
-//         Ok((
-//             Message {
-//                 header: Header {
-//                     message_type,
-//                     flags,
-//                     serial,
-//                     fields,
-//                 },
-//                 body: fields
-//                     .signature
-//                     .map(|signature| unmarshal::Iterator::new(IteratorData { data, signature })),
-//             },
-//             rest,
-//         ))
-//     }
-// }
 
 impl<T: [const] Marshal> const Marshal for &Message<'_, T> {
     fn marshal<W: [const] marshal::Write + ?Sized>(self, w: &mut W) {
@@ -246,7 +251,10 @@ impl<T: [const] Marshal> const Marshal for &Message<'_, T> {
 
 impl<'a> Unmarshal<'a> for Message<'a, &'a [u8]> {
     fn unmarshal(r: &mut unmarshal::Reader<'a>) -> unmarshal::Result<Self> {
-        let _endian = r.read_byte().and_then(Endian::from_u8)?;
+        let endian = r.read_byte().and_then(Endian::from_u8)?;
+        if endian != NATIVE_ENDIAN {
+            Err(Error::UnsupportedEndian)?
+        }
         let message_type = r.read_byte().and_then(MessageType::from_u8)?;
         let flags = r.read_byte().map(Flags)?;
         let _version = r.read_byte()?;
@@ -282,7 +290,13 @@ impl<'a> MessageIterator<'a> {
         if self.reader.rest_bytes().is_empty() {
             None?;
         }
-        Some(self.reader.read())
+        match self.reader.read() {
+            Ok(x) => {
+                self.reader = unmarshal::Reader::new(self.reader.rest_bytes());
+                Some(Ok(x))
+            }
+            Err(e) => Some(Err(e)),
+        }
     }
 }
 
@@ -294,43 +308,43 @@ impl<'a> Iterator for MessageIterator<'a> {
     }
 }
 
-#[test]
-fn test_marshal() {
-    let header = Header {
+#[cfg(test)]
+const fn test_header() -> Header<'static> {
+    Header {
         message_type: MessageType::Signal,
         flags: Flags(1),
         serial: NonZeroU32::new(0xffffffff).unwrap(),
-        fields: Fields {
-            ..Default::default()
-        }
-        .sender("org.freedesktop.DBus")
-        .destination(":1.1758")
-        .path("/org/freedesktop/DBus")
-        .interface("org.freedesktop.DBus")
-        .member("NameAcquired")
-        .signature("s"),
-    };
+        fields: Fields::empty()
+            .sender("org.freedesktop.DBus")
+            .destination(":1.1758")
+            .path("/org/freedesktop/DBus")
+            .interface("org.freedesktop.DBus")
+            .member("NameAcquired")
+            .signature("s"),
+    }
+}
+
+#[test]
+fn test_marshal() {
+    let header = test_header();
     dbg!(&header);
     let msg = Message {
         header,
         body: strings::String::from_str(":1.1758"),
     };
     let res = marshal::marshal(&msg);
-    dbg!(ShowBytes(&res));
+    dbg!(crate::show_bytes(&res));
 }
 
-#[allow(dead_code)]
-struct ShowBytes<'a>(&'a [u8]);
-
-impl core::fmt::Debug for ShowBytes<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for &x in self.0 {
-            if x.is_ascii_graphic() {
-                write!(f, "{}", x as char)?;
-            } else {
-                write!(f, "\\{x}")?;
-            }
-        }
-        Ok(())
-    }
+#[test]
+fn test_unmarshal() {
+    let header = test_header();
+    let msg = Message {
+        header,
+        body: strings::String::from_str(":1.1758"),
+    };
+    let res = marshal::marshal(&msg);
+    let mut iter = MessageIterator::new(&res);
+    let msg = iter.next().unwrap().unwrap();
+    assert_eq!(msg.header, header);
 }

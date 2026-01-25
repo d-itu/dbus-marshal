@@ -10,7 +10,7 @@ unsafe impl<T> MultiSignature for Variant<T> {
     const DATA: Self::Data = b'v';
 }
 unsafe impl<T> Signature for Variant<T> {
-    const ALIGN: usize = 1;
+    const ALIGNMENT: usize = 1;
 }
 
 #[derive(Clone, Copy)]
@@ -21,7 +21,7 @@ unsafe impl<K: Signature, V: Signature> MultiSignature for Entry<K, V> {
     const DATA: Self::Data = signature::Quadruple(b'{', K::DATA, V::DATA, b'}');
 }
 unsafe impl<K: Signature, V: Signature> Signature for Entry<K, V> {
-    const ALIGN: usize = 8;
+    const ALIGNMENT: usize = 8;
 }
 
 unsafe impl<T: Signature> MultiSignature for [T] {
@@ -29,7 +29,7 @@ unsafe impl<T: Signature> MultiSignature for [T] {
     const DATA: Self::Data = signature::Pair(b'a', T::DATA);
 }
 unsafe impl<T: Signature> Signature for [T] {
-    const ALIGN: usize = 4;
+    const ALIGNMENT: usize = 4;
 }
 
 // #[derive(Clone, Copy)]
@@ -79,7 +79,7 @@ unsafe impl<T: MultiSignature + StructConstructor> MultiSignature for Struct<T> 
     const DATA: Self::Data = signature::Triple(b'(', T::DATA, b')');
 }
 unsafe impl<T: MultiSignature + StructConstructor> Signature for Struct<T> {
-    const ALIGN: usize = 8;
+    const ALIGNMENT: usize = 8;
 }
 
 #[macro_export]

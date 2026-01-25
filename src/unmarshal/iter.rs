@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum IterErr {
+pub(super) enum IterErr {
     EndOfIteration,
     Error(Error),
 }
@@ -18,7 +18,15 @@ impl From<Error> for IterErr {
 }
 
 pub type Result<T> = result::Result<T, Error>;
-type IterResult<T> = result::Result<T, IterErr>;
+pub(super) type IterResult<T> = result::Result<T, IterErr>;
+
+pub(super) fn flatten<T>(x: IterResult<T>) -> Option<Result<T>> {
+    match x {
+        Ok(x) => Some(Ok(x)),
+        Err(IterErr::Error(e)) => Some(Err(e)),
+        Err(IterErr::EndOfIteration) => None,
+    }
+}
 
 #[derive(Debug)]
 pub enum Token<'a> {
@@ -326,11 +334,11 @@ impl<'a> Iter<'a> {
             TokenKind::StructOpen => {
                 self.reader.align_to(8)?;
                 Token::StructOpen
-            },
+            }
             TokenKind::EntryOpen => {
                 self.reader.align_to(8)?;
                 Token::EntryOpen
-            },
+            }
             TokenKind::StructClose => Token::StructClose,
             TokenKind::EntryClose => Token::EntryClose,
             TokenKind::Variant => {
@@ -344,20 +352,13 @@ impl<'a> Iter<'a> {
             }
         })
     }
-    pub fn next(&mut self) -> Option<Result<Token<'a>>> {
-        match self.iter() {
-            Ok(x) => Some(Ok(x)),
-            Err(IterErr::Error(e)) => Some(Err(e)),
-            Err(IterErr::EndOfIteration) => None,
-        }
-    }
 }
 
 impl<'a> Iterator for Iter<'a> {
     type Item = Result<Token<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next()
+        flatten(self.iter())
     }
 }
 

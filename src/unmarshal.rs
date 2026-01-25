@@ -10,6 +10,7 @@ pub enum Error {
     NestingMismatched,
     NotEnoughData,
     InvalidHeader,
+    UnsupportedEndian,
     NestingDepthExceeded,
 }
 
@@ -35,12 +36,16 @@ impl<'a> Reader<'a> {
     fn seek_unchecked(&mut self, n: usize) {
         self.count += n;
     }
-    pub fn seek(&mut self, n: usize) -> Result<()> {
+    pub fn seek(&mut self, n: usize) -> Result<Self> {
         if self.count + n > self.len {
             Err(Error::NotEnoughData)?;
         }
+        let res = Self {
+            len: self.count + n,
+            ..*self
+        };
         self.seek_unchecked(n);
-        Ok(())
+        Ok(res)
     }
     fn aligned(&self, align: usize) -> Result<usize> {
         let aligned = aligned(self.count, align);
@@ -60,7 +65,7 @@ impl<'a> Reader<'a> {
         T::unmarshal(self)
     }
     pub fn read_byte(&mut self) -> Result<u8> {
-        let res = *self.rest_bytes().get(1).ok_or(Error::NotEnoughData)?;
+        let res = *self.rest_bytes().get(0).ok_or(Error::NotEnoughData)?;
         self.seek_unchecked(1);
         Ok(res)
     }
@@ -138,7 +143,8 @@ impl<'a, T: Unmarshal<'a> + Signature> Unmarshal<'a> for Variant<T> {
         if sig != crate::signature!(T) {
             Err(Error::UnexpectedType)?
         }
-        Ok(r.read()?)
+        let inner = r.read()?;
+        Ok(Self(inner))
     }
 }
 
@@ -165,6 +171,40 @@ impl<'a, T: Unmarshal<'a> + StructConstructor> Unmarshal<'a> for Struct<T> {
     fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
         r.align_to(8)?;
         Ok(Self(T::unmarshal(r)?))
+    }
+}
+
+pub struct ArrayIter<'a, T> {
+    reader: Reader<'a>,
+    marker: PhantomData<T>,
+}
+
+impl<'a, T: Signature + Unmarshal<'a>> ArrayIter<'a, T> {
+    fn next(&mut self) -> iter::IterResult<T> {
+        if self.reader.rest_bytes().is_empty() {
+            Err(iter::IterErr::EndOfIteration)?
+        }
+        self.reader.align_to(T::ALIGNMENT)?;
+        Ok(self.reader.read()?)
+    }
+}
+
+impl<'a, T: Signature + Unmarshal<'a>> Iterator for ArrayIter<'a, T> {
+    type Item = Result<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        flatten(self.next())
+    }
+}
+
+impl<'a, T: Unmarshal<'a> + Signature> Unmarshal<'a> for ArrayIter<'a, T> {
+    fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
+        let len: u32 = r.read()?;
+        r.align_to(T::ALIGNMENT)?;
+        Ok(Self {
+            reader: r.seek(len as _)?,
+            marker: PhantomData,
+        })
     }
 }
 

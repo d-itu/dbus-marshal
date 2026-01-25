@@ -117,7 +117,7 @@ const fn marshal_array_elements<T: [const] Marshal, W: [const] Write + ?Sized>(
 impl<T: Signature + [const] Marshal> const Marshal for &[T] {
     fn marshal<W: [const] Write + ?Sized>(self, w: &mut W) {
         let insert_pos = w.skip_aligned(4);
-        w.align_to(T::ALIGN);
+        w.align_to(T::ALIGNMENT);
         let begin = w.position();
         marshal_array_elements(self, w);
         let len = w.position() - begin;
