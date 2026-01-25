@@ -219,8 +219,8 @@ pub struct Header<'a> {
 }
 
 pub struct Message<'a, T> {
-    header: Header<'a>,
-    body: T,
+    pub header: Header<'a>,
+    pub body: T,
 }
 
 impl<T: [const] Marshal> const Marshal for &Message<'_, T> {
