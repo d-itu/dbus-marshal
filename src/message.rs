@@ -280,12 +280,6 @@ impl<'a> Unmarshal<'a> for Message<'a, &'a [u8]> {
     }
 }
 
-impl<'a> Message<'a, &'a [u8]> {
-    pub fn from_bytes(data: &'a [u8]) -> unmarshal::Result<Self> {
-        Self::unmarshal(&mut unmarshal::Reader::new(data))
-    }
-}
-
 pub struct MessageIterator<'a> {
     reader: unmarshal::Reader<'a>,
 }
@@ -353,8 +347,16 @@ fn test_unmarshal() {
         header,
         body: strings::String::from_str(":1.1758"),
     };
-    let res = marshal::marshal(&msg);
-    let mut iter = MessageIterator::new(&res);
+    let size = marshal::calc_size(&msg);
+    let mut buf = Box::new_zeroed_slice(size * 2);
+    let (_, remaining) = marshal::write(&msg, &mut buf).unwrap();
+    marshal::write(&msg, remaining).unwrap();
+
+    let buf = unsafe { buf.assume_init() };
+    let mut iter = MessageIterator::new(&buf);
     let msg = iter.next().unwrap().unwrap();
     assert_eq!(msg.header, header);
+    let msg = iter.next().unwrap().unwrap();
+    assert_eq!(msg.header, header);
+    assert_eq!(iter.next(), None);
 }

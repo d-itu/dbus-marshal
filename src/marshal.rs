@@ -1,4 +1,4 @@
-use core::{mem::MaybeUninit, slice};
+use core::mem::MaybeUninit;
 
 use crate::{marshal::writer::*, signature::Signature, strings, types::*};
 
@@ -147,7 +147,7 @@ pub const fn write<Value: [const] Marshal>(
     let (write, remaining) = buf.split_at_mut_checked(size).ok_or(())?;
     unsafe {
         write_unchecked(value, write.as_ptr() as _);
-        let write = slice::from_raw_parts_mut(write.as_ptr() as _, write.len());
+        let write = write.assume_init_mut();
         Ok((write, remaining))
     }
 }
