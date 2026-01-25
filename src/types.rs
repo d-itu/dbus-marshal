@@ -32,25 +32,6 @@ unsafe impl<T: Signature> Signature for [T] {
     const ALIGNMENT: usize = 4;
 }
 
-// #[derive(Clone, Copy)]
-// pub struct Array<I>(I);
-//
-// unsafe impl<T, I> MultiSignature for Array<I>
-// where
-//     T: Signature,
-//     for<'a> &'a I: IntoIterator<Item = &'a T>,
-// {
-//     type Data = signature::Pair<u8, T::Data>;
-//     const DATA: Self::Data = signature::Pair(b'a', T::DATA);
-// }
-// unsafe impl<T, I> Signature for Array<I>
-// where
-//     T: Signature,
-//     for<'a> &'a I: IntoIterator<Item = &'a T>,
-// {
-//     const ALIGN: usize = 4;
-// }
-
 mod private {
     pub trait StructConstructor {}
 }
@@ -83,62 +64,62 @@ unsafe impl<T: MultiSignature + StructConstructor> Signature for Struct<T> {
 }
 
 #[macro_export]
-macro_rules! struct_constructor {
+macro_rules! multiple_type {
     ($x:ty, $($xs:ty),* $(,)?) => {
-        $crate::types::Append<$x, $crate::struct_constructor!($($xs),*)>
+        $crate::Append<$x, $crate::multiple_type!($($xs),*)>
     };
     ($x:ty $(,)?) => {
-        $crate::types::Append<$x, $crate::types::Empty>
+        $crate::Append<$x, $crate::Empty>
     };
     () => {
-        $crate::types::Empty
+        $crate::Empty
     };
 }
 
 #[macro_export]
 macro_rules! struct_type {
     ($($xs:ty),* $(,)? ) => {
-        $crate::types::Struct<$crate::struct_constructor!($($xs),*)>
+        $crate::Struct<$crate::multiple_type!($($xs),*)>
     };
 }
 
 #[macro_export]
-macro_rules! struct_constructor_new {
+macro_rules! multiple_new {
     ($x:expr, $($xs:expr),* $(,)?) => {
-        $crate::types::Append($x, $crate::struct_constructor_new!($($xs),*))
+        $crate::Append($x, $crate::multiple_new!($($xs),*))
     };
     ($x:expr $(,)?) => {
-        $crate::types::Append($x, $crate::types::Empty)
+        $crate::Append($x, $crate::Empty)
     };
     () => {
-        $crate::types::Empty
+        $crate::Empty
     };
 }
 
 #[macro_export]
 macro_rules! struct_new {
     ($($xs:expr),* $(,)? ) => {
-        $crate::types::Struct($crate::struct_constructor_new!($($xs),*))
+        $crate::Struct($crate::multiple_new!($($xs),*))
     };
 }
 
 #[macro_export]
-macro_rules! struct_constructor_match {
+macro_rules! multiple_match {
     ($x:pat, $($xs:pat),* $(,)?) => {
-        $crate::types::Append($x, $crate::struct_constructor_match!($($xs),*))
+        $crate::Append($x, $crate::multiple_match!($($xs),*))
     };
     ($x:pat $(,)?) => {
-        $crate::types::Append($x, $crate::types::Empty)
+        $crate::Append($x, $crate::Empty)
     };
     () => {
-        $crate::types::Empty
+        $crate::Empty
     };
 }
 
 #[macro_export]
 macro_rules! struct_match {
     ($($xs:pat),* $(,)? ) => {
-        $crate::types::Struct($crate::struct_constructor_match!($($xs),*))
+        $crate::Struct($crate::multiple_match!($($xs),*))
     };
 }
 

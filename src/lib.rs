@@ -17,13 +17,13 @@ use core::fmt::{self, Debug};
 pub mod authentication;
 pub mod marshal;
 pub mod unmarshal;
+pub mod signature;
 
 pub use message::*;
 pub use strings::*;
 pub use types::*;
 
 mod message;
-mod signature;
 mod strings;
 mod types;
 
