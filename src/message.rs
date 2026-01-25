@@ -56,25 +56,28 @@ impl MessageType {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
-pub struct Flags(u8);
+pub struct Flags(pub u8);
 
 impl Flags {
-    pub fn with_no_reply_expected(self) -> Self {
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+    pub const fn with_no_reply_expected(self) -> Self {
         Self(self.0 | 1)
     }
-    pub fn no_reply_expected(self) -> bool {
+    pub const fn no_reply_expected(self) -> bool {
         self.0 & 1 != 0
     }
-    pub fn with_no_auto_start(self) -> Self {
+    pub const fn with_no_auto_start(self) -> Self {
         Self(self.0 | 2)
     }
-    pub fn no_auto_start(self) -> bool {
+    pub const fn no_auto_start(self) -> bool {
         self.0 & 2 != 0
     }
-    pub fn with_allow_interactive_authorization(self) -> Self {
+    pub const fn with_allow_interactive_authorization(self) -> Self {
         Self(self.0 | 4)
     }
-    pub fn allow_interactive_authorization(self) -> bool {
+    pub const fn allow_interactive_authorization(self) -> bool {
         self.0 & 4 != 0
     }
 }
