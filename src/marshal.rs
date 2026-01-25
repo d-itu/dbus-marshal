@@ -141,7 +141,7 @@ pub const unsafe fn write_unchecked<Value: [const] Marshal>(value: Value, ptr: *
 
 pub const fn write<Value: [const] Marshal>(
     value: Value,
-    buf: &[MaybeUninit<u8>],
+    buf: &mut [MaybeUninit<u8>],
 ) -> Result<(&[u8], &[MaybeUninit<u8>]), ()> {
     let size = calc_size(value);
     let (write, remaining) = buf.split_at_checked(size).ok_or(())?;

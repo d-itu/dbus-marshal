@@ -221,6 +221,7 @@ pub struct Header<'a> {
     pub fields: Fields<'a>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Message<'a, T> {
     pub header: Header<'a>,
     pub body: T,
