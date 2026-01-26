@@ -83,6 +83,14 @@ unsafe impl Signature for bool {
     const ALIGNMENT: usize = 4;
 }
 
+unsafe impl MultiSignature for str {
+    type Data = u8;
+    const DATA: Self::Data = b's';
+}
+unsafe impl Signature for str {
+    const ALIGNMENT: usize = 4;
+}
+
 unsafe impl MultiSignature for strings::String {
     type Data = u8;
     const DATA: Self::Data = b's';
@@ -104,5 +112,13 @@ unsafe impl MultiSignature for strings::ObjectPath {
     const DATA: Self::Data = b'o';
 }
 unsafe impl Signature for strings::ObjectPath {
+    const ALIGNMENT: usize = 4;
+}
+
+unsafe impl<T: Signature> MultiSignature for [T] {
+    type Data = Pair<u8, T::Data>;
+    const DATA: Self::Data = Pair(b'a', T::DATA);
+}
+unsafe impl<T: Signature> Signature for [T] {
     const ALIGNMENT: usize = 4;
 }

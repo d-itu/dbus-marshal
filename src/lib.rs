@@ -1,6 +1,10 @@
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![feature(
+    arbitrary_self_types,
+    associated_type_defaults,
+    cast_maybe_uninit,
     const_array,
+    const_clone,
     const_cmp,
     const_convert,
     const_destruct,
@@ -8,7 +12,6 @@
     const_option_ops,
     const_trait_impl,
     const_try,
-    slice_from_ptr_range,
     str_as_str
 )]
 
@@ -16,8 +19,8 @@ use core::fmt::{self, Debug};
 
 pub mod authentication;
 pub mod marshal;
-pub mod unmarshal;
 pub mod signature;
+pub mod unmarshal;
 
 pub use message::*;
 pub use strings::*;

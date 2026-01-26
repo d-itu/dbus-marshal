@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::{mem, ops::Deref};
 
 #[repr(transparent)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -46,6 +46,17 @@ macro_rules! impl_string {
         impl<'a> const From<&'a [u8]> for &'a $t {
             fn from(s: &'a [u8]) -> Self {
                 <$t>::from_bytes(s)
+            }
+        }
+        #[cfg(feature = "std")]
+        impl std::borrow::ToOwned for $t {
+            type Owned = Box<$t>;
+
+            #[inline]
+            fn to_owned(&self) -> Box<$t> {
+                let mut res = Box::new_uninit_slice(self.len());
+                res.write_copy_of_slice(self);
+                unsafe { mem::transmute(res.assume_init()) }
             }
         }
         impl const AsRef<[u8]> for $t {

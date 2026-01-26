@@ -7,7 +7,7 @@ use core::{
 
 use crate::{
     marshal::{self, Marshal},
-    signature::{Signature, SignatureProxy},
+    signature::{MultiSignature, Signature, SignatureProxy},
     strings,
     types::{self, Variant},
     unmarshal::{self, Error, Unmarshal},
@@ -96,19 +96,58 @@ impl core::fmt::Debug for Flags {
 }
 
 macro_rules! define_fields {
-    ($($id:literal $field:ident: $type:ty),* $(,)?) => {
+    (@ref (ref $type:ty)) => {
+        &'a $type
+    };
+    (@ref $type:ty) => {
+        $type
+    };
+    (@owned (ref $type:ty)) => {
+        Box<$type>
+    };
+    (@owned $type:ty) => {
+        $type
+    };
+    (@to_owned $field:ident (ref $type:ty)) => {
+        &**$field
+    };
+    (@to_owned $field:ident $type:ty) => {
+        *$field
+    };
+    ($($id:literal $field:ident: $type:tt),* $(,)?) => {
         #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
         pub struct Fields<'a> {
-            $(pub $field: Option<$type>,)*
+            $(pub $field: Option<define_fields!(@ref $type)>,)*
+        }
+
+        #[cfg(feature = "std")]
+        #[derive(Default, Debug, PartialEq, Eq)]
+        pub struct OwnedFields {
+            $(pub $field: Option<define_fields!(@owned $type)>,)*
+        }
+
+        #[cfg(feature = "std")]
+        impl OwnedFields {
+            pub fn as_ref(&self) -> Fields<'_> {
+                Fields {
+                    $($field: self.$field.as_ref().map(|x| define_fields!(@to_owned x $type)),)*
+                }
+            }
         }
 
         impl<'a> Fields<'a> {
+            #[cfg(feature = "std")]
+            pub fn to_owned(&self) -> OwnedFields {
+                OwnedFields {
+                    $($field: self.$field.map(|x| x.to_owned()),)*
+                }
+            }
             pub const fn empty() -> Self {
                 Self {
                     $($field: None,)*
                 }
             }
-            $(pub const fn $field(self, value: impl [const] Into<$type>) -> Self {
+            $(pub const fn $field(self, value: impl [const] Into<define_fields!(@ref $type)>) -> Self {
                 Self {
                     $field: Some(value.into()),
                     ..self
@@ -116,8 +155,8 @@ macro_rules! define_fields {
             })*
         }
 
-        impl const Marshal for &Fields<'_> {
-            fn marshal<W: [const] marshal::Write + ?Sized>(self, w: &mut W) {
+        impl Marshal for &Fields<'_> {
+            fn marshal<W: marshal::Write + ?Sized>(self, w: &mut W) {
                 $(if let Some(value) = self.$field {
                     w.align_to(8);
                     w.write($id as u8);
@@ -131,7 +170,7 @@ macro_rules! define_fields {
                 let id: u8 = r.read()?;
                 match id {
                     $($id => {
-                        let value: Variant<$type> = r.read()?;
+                        let value: Variant<define_fields!(@ref $type)> = r.read()?;
 
                         let field = value.0.into();
                         Ok(Entry { id, field })
@@ -202,14 +241,14 @@ unsafe impl Signature for Entry<'_> {
 }
 
 define_fields! {
-    1 path: &'a strings::ObjectPath,
-    2 interface: &'a strings::String,
-    3 member: &'a strings::String,
-    4 error_name: &'a strings::String,
+    1 path: (ref strings::ObjectPath),
+    2 interface: (ref strings::String),
+    3 member: (ref strings::String),
+    4 error_name: (ref strings::String),
     5 reply_serial: u32,
-    6 destination: &'a strings::String,
-    7 sender: &'a strings::String,
-    8 signature: &'a strings::Signature,
+    6 destination: (ref strings::String),
+    7 sender: (ref strings::String),
+    8 signature: (ref strings::Signature),
     9 unix_fds: u32,
 }
 
@@ -221,14 +260,102 @@ pub struct Header<'a> {
     pub fields: Fields<'a>,
 }
 
+// impl<'a> Header<'a> {
+//     pub fn method_call(
+//         flags: Flags,
+//         serial: NonZeroU32,
+//         path: impl Into<&'a strings::ObjectPath>,
+//         member: impl Into<&'a strings::String>,
+//     ) -> Self {
+//         Self {
+//             message_type: MessageType::MethodCall,
+//             flags,
+//             serial,
+//             fields: Fields::empty().path(path).member(member),
+//         }
+//     }
+// }
+
+#[cfg(feature = "std")]
+impl Header<'_> {
+    pub fn to_owned(&self) -> OwnedHeader {
+        OwnedHeader {
+            message_type: self.message_type,
+            flags: self.flags,
+            serial: self.serial,
+            fields: self.fields.to_owned(),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, PartialEq, Eq)]
+pub struct OwnedHeader {
+    pub message_type: MessageType,
+    pub flags: Flags,
+    pub serial: NonZeroU32,
+    pub fields: OwnedFields,
+}
+
+#[cfg(feature = "std")]
+impl OwnedHeader {
+    pub fn as_ref(&self) -> Header<'_> {
+        Header {
+            message_type: self.message_type,
+            flags: self.flags,
+            serial: self.serial,
+            fields: self.fields.as_ref(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Message<'a, T> {
     pub header: Header<'a>,
     pub body: T,
 }
 
-impl<T: [const] Marshal> const Marshal for &Message<'_, T> {
-    fn marshal<W: [const] marshal::Write + ?Sized>(self, w: &mut W) {
+impl<'a> Message<'a, &'a [u8]> {
+    #[cfg(feature = "std")]
+    pub fn to_owned(&self) -> OwnedMessage<Box<[u8]>> {
+        OwnedMessage {
+            header: self.header.to_owned(),
+            body: self.body.to_owned().into(),
+        }
+    }
+    pub fn parse<T: Unmarshal<'a> + MultiSignature>(&self) -> unmarshal::Result<T> {
+        let signature = self
+            .header
+            .fields
+            .signature
+            .unwrap_or(&strings::Signature::from_bytes(b""));
+        if signature != crate::signature!(T) {
+            Err(Error::UnexpectedType)?
+        }
+        let mut reader = unmarshal::Reader::new(self.body);
+        reader.read()
+    }
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, PartialEq, Eq)]
+pub struct OwnedMessage<T> {
+    pub header: OwnedHeader,
+    pub body: T,
+}
+
+#[cfg(feature = "std")]
+impl OwnedMessage<Box<[u8]>> {
+    pub fn as_ref(&self) -> Message<'_, &[u8]> {
+        Message {
+            header: self.header.as_ref(),
+            body: &self.body,
+        }
+    }
+}
+
+impl<T: Marshal> Marshal for &Message<'_, T> {
+    fn marshal<W: marshal::Write + ?Sized>(self, w: &mut W) {
         let Message { header, body } = self;
         w.write_byte(NATIVE_ENDIAN as _);
         w.write_byte(header.message_type as _);

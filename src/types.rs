@@ -24,14 +24,6 @@ unsafe impl<K: Signature, V: Signature> Signature for Entry<K, V> {
     const ALIGNMENT: usize = 8;
 }
 
-unsafe impl<T: Signature> MultiSignature for [T] {
-    type Data = signature::Pair<u8, T::Data>;
-    const DATA: Self::Data = signature::Pair(b'a', T::DATA);
-}
-unsafe impl<T: Signature> Signature for [T] {
-    const ALIGNMENT: usize = 4;
-}
-
 mod private {
     pub trait StructConstructor {}
 }
@@ -130,7 +122,7 @@ macro_rules! signature_static {
         static_assertions::assert_eq_align!(Data, u8);
         const DATA: Data = <$x as $crate::signature::MultiSignature>::DATA;
         let result: &[u8; core::mem::size_of::<Data>()] = unsafe { core::mem::transmute(&DATA) };
-        $crate::strings::Signature::from_bytes(result)
+        $crate::Signature::from_bytes(result)
     }};
 }
 
@@ -140,7 +132,7 @@ macro_rules! signature {
         let data = <$x as $crate::signature::MultiSignature>::DATA;
         let ptr = &data as *const _ as *const u8;
         let len = core::mem::size_of_val(&data);
-        $crate::strings::Signature::from_bytes(unsafe { core::slice::from_raw_parts(ptr, len) })
+        $crate::Signature::from_bytes(unsafe { core::slice::from_raw_parts(ptr, len) })
     }};
 }
 

@@ -2,7 +2,7 @@ use core::ptr;
 
 use crate::marshal::Marshal;
 
-pub const unsafe trait Write {
+pub unsafe trait Write {
     fn position(&self) -> usize;
 
     fn seek(&mut self, n: usize);
@@ -23,14 +23,14 @@ pub const unsafe trait Write {
 
     fn write_byte(&mut self, byte: u8);
 
-    fn write<T: [const] Marshal>(&mut self, v: T) {
+    fn write<T: Marshal>(&mut self, v: T) {
         v.marshal(self);
     }
 
-    fn insert<T: [const] Marshal>(&mut self, v: T, pos: usize);
+    fn insert<T: Marshal>(&mut self, v: T, pos: usize);
 }
 
-unsafe impl const Write for usize {
+unsafe impl Write for usize {
     fn position(&self) -> usize {
         *self
     }
@@ -47,7 +47,7 @@ unsafe impl const Write for usize {
         *self += 1;
     }
 
-    fn insert<T: [const] Marshal>(&mut self, _: T, _: usize) {}
+    fn insert<T: Marshal>(&mut self, _: T, _: usize) {}
 }
 
 pub struct Span {
@@ -68,7 +68,7 @@ impl Span {
 }
 
 struct Cursor(*mut u8);
-unsafe impl const Write for Cursor {
+unsafe impl Write for Cursor {
     fn position(&self) -> usize {
         unimplemented!()
     }
@@ -89,12 +89,12 @@ unsafe impl const Write for Cursor {
         unimplemented!()
     }
 
-    fn insert<T: [const] Marshal>(&mut self, _: T, _: usize) {
+    fn insert<T: Marshal>(&mut self, _: T, _: usize) {
         unimplemented!()
     }
 }
 
-unsafe impl const Write for Span {
+unsafe impl Write for Span {
     fn write_bytes(&mut self, bytes: &[u8]) {
         unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), self.cursor, bytes.len()) }
         self.seek(bytes.len())
@@ -112,14 +112,16 @@ unsafe impl const Write for Span {
     }
 
     fn align_to(&mut self, n: usize) {
-        self.cursor = unsafe { self.begin.add(crate::aligned(self.len(), n)) };
+        let padding = crate::align_padding(self.len(), n);
+        const ZEROS: [u8; 7] = [0; _];
+        self.write_bytes(unsafe { ZEROS.get_unchecked(..padding) });
     }
 
     fn position(&self) -> usize {
         self.len()
     }
 
-    fn insert<T: [const] Marshal>(&mut self, v: T, pos: usize) {
+    fn insert<T: Marshal>(&mut self, v: T, pos: usize) {
         Cursor(unsafe { self.begin.add(pos) }).write(v)
     }
 }
