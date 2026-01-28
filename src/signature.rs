@@ -1,37 +1,86 @@
+use core::{mem, slice};
+
 use crate::strings;
 
 mod private {
-    use core::marker::Destruct;
-    pub trait Node: const Destruct {}
+    pub trait Sealed {}
+}
+use private::Sealed;
+
+pub trait Node: Sealed {
+    fn signature(&self) -> &strings::Signature;
 }
 
-impl Node for u8 {}
-impl<const N: usize> Node for [u8; N] {}
-impl Node for () {}
-use private::Node;
-impl<X: Node, Y: Node> Node for Pair<X, Y> {}
-impl<X: Node, Y: Node, Z: Node> Node for Triple<X, Y, Z> {}
-impl<X: Node, Y: Node, Z: Node, W: Node> Node for Quadruple<X, Y, Z, W> {}
+impl Sealed for u8 {}
+impl Node for u8 {
+    fn signature(&self) -> &strings::Signature {
+        strings::Signature::from_bytes(unsafe { slice::from_raw_parts(self, 1) })
+    }
+}
+impl<const N: usize> Sealed for [u8; N] {}
+impl<const N: usize> Node for [u8; N] {
+    fn signature(&self) -> &strings::Signature {
+        strings::Signature::from_bytes(self)
+    }
+}
+impl Sealed for () {}
+impl Node for () {
+    fn signature(&self) -> &strings::Signature {
+        strings::Signature::from_bytes(&[])
+    }
+}
+impl<X: Node, Y: Node> Sealed for Pair<X, Y> {}
+impl<X: Node, Y: Node> Node for Pair<X, Y> {
+    fn signature(&self) -> &strings::Signature {
+        strings::Signature::from_bytes(unsafe {
+            slice::from_raw_parts(self as *const Self as _, mem::size_of::<Self>())
+        })
+    }
+}
+impl<X: Node, Y: Node, Z: Node> Sealed for Triple<X, Y, Z> {}
+impl<X: Node, Y: Node, Z: Node> Node for Triple<X, Y, Z> {
+    fn signature(&self) -> &strings::Signature {
+        strings::Signature::from_bytes(unsafe {
+            slice::from_raw_parts(self as *const Self as _, mem::size_of::<Self>())
+        })
+    }
+}
+impl<X: Node, Y: Node, Z: Node, W: Node> Sealed for Quadruple<X, Y, Z, W> {}
+impl<X: Node, Y: Node, Z: Node, W: Node> Node for Quadruple<X, Y, Z, W> {
+    fn signature(&self) -> &strings::Signature {
+        strings::Signature::from_bytes(unsafe {
+            slice::from_raw_parts(self as *const Self as _, mem::size_of::<Self>())
+        })
+    }
+}
 
-#[repr(packed)]
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Pair<X, Y>(pub X, pub Y);
 
-#[repr(packed)]
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Triple<X, Y, Z>(pub X, pub Y, pub Z);
 
-#[repr(packed)]
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Quadruple<X, Y, Z, W>(pub X, pub Y, pub Z, pub W);
-
-pub trait SignatureProxy {
-    type Proxy: MultiSignature + ?Sized;
-}
 
 pub unsafe trait MultiSignature {
     type Data: Node;
     const DATA: Self::Data;
+}
+
+pub unsafe trait Signature: MultiSignature {
+    const ALIGNMENT: usize;
+}
+
+pub trait SignatureProxy {
+    type Proxy: Signature + ?Sized;
+}
+
+impl<T: Signature + ?Sized> SignatureProxy for &T {
+    type Proxy = T;
 }
 
 unsafe impl<T: SignatureProxy + ?Sized> MultiSignature for T {
@@ -39,16 +88,8 @@ unsafe impl<T: SignatureProxy + ?Sized> MultiSignature for T {
     const DATA: Self::Data = T::Proxy::DATA;
 }
 
-impl<T: MultiSignature + ?Sized> SignatureProxy for &T {
-    type Proxy = T;
-}
-
-pub unsafe trait Signature: MultiSignature {
-    const ALIGNMENT: usize;
-}
-
-unsafe impl<T: Signature + ?Sized> Signature for &T {
-    const ALIGNMENT: usize = T::ALIGNMENT;
+unsafe impl<T: SignatureProxy + ?Sized> Signature for T {
+    const ALIGNMENT: usize = T::Proxy::ALIGNMENT;
 }
 
 macro_rules! impl_signature {
@@ -121,4 +162,15 @@ unsafe impl<T: Signature> MultiSignature for [T] {
 }
 unsafe impl<T: Signature> Signature for [T] {
     const ALIGNMENT: usize = 4;
+}
+
+#[test]
+fn test_signature() {
+    type T = crate::struct_type!(u8, u32, i16);
+    const XS: crate::struct_type!(i32, f32, u8) = crate::struct_new!(1i32, 2.0, 2u8);
+    let crate::struct_match!(x, _, z) = XS;
+    assert_eq!(x, 1);
+    assert_eq!(z, 2);
+
+    assert_eq!(T::DATA.signature(), strings::Signature::from_str("(yun)"));
 }

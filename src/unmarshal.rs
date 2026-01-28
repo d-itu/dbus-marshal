@@ -1,6 +1,11 @@
 use core::{marker::PhantomData, result, slice};
 
-use crate::{aligned, signature::Signature, strings, types::*};
+use crate::{
+    aligned,
+    signature::{Node, Signature},
+    strings,
+    types::*,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Error {
@@ -140,7 +145,7 @@ impl<'a> Unmarshal<'a> for &'a strings::Signature {
 impl<'a, T: Unmarshal<'a> + Signature> Unmarshal<'a> for Variant<T> {
     fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
         let sig: &strings::Signature = r.read()?;
-        if sig != crate::signature!(T) {
+        if sig != T::DATA.signature() {
             Err(Error::UnexpectedType)?
         }
         let inner = r.read()?;

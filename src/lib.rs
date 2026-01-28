@@ -1,15 +1,10 @@
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![feature(
-    arbitrary_self_types,
-    associated_type_defaults,
     cast_maybe_uninit,
     const_array,
-    const_clone,
     const_cmp,
     const_convert,
     const_destruct,
-    const_index,
-    const_option_ops,
     const_trait_impl,
     const_try,
     str_as_str

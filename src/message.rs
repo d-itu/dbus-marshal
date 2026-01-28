@@ -7,7 +7,7 @@ use core::{
 
 use crate::{
     marshal::{self, Marshal},
-    signature::{MultiSignature, Signature, SignatureProxy},
+    signature::{MultiSignature, Node as _, SignatureProxy},
     strings,
     types::{self, Variant},
     unmarshal::{self, Error, Unmarshal},
@@ -236,10 +236,6 @@ impl SignatureProxy for Entry<'_> {
     type Proxy = types::Entry<u8, types::Variant<Infallible>>;
 }
 
-unsafe impl Signature for Entry<'_> {
-    const ALIGNMENT: usize = 8;
-}
-
 define_fields! {
     1 path: (ref strings::ObjectPath),
     2 interface: (ref strings::String),
@@ -329,7 +325,7 @@ impl<'a> Message<'a, &'a [u8]> {
             .fields
             .signature
             .unwrap_or(&strings::Signature::from_bytes(b""));
-        if signature != crate::signature!(T) {
+        if signature != T::DATA.signature() {
             Err(Error::UnexpectedType)?
         }
         let mut reader = unmarshal::Reader::new(self.body);

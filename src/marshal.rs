@@ -1,6 +1,11 @@
 use core::mem::MaybeUninit;
 
-use crate::{marshal::writer::*, signature::Signature, strings, types::*};
+use crate::{
+    marshal::writer::*,
+    signature::{Node as _, Signature, SignatureProxy},
+    strings,
+    types::*,
+};
 
 pub trait Marshal: Clone {
     fn marshal<W: Write + ?Sized>(self, w: &mut W);
@@ -82,7 +87,7 @@ impl Marshal for &strings::ObjectPath {
 
 impl<T: Marshal + Signature> Marshal for Variant<T> {
     fn marshal<W: Write + ?Sized>(self, w: &mut W) {
-        w.write(crate::signature!(T));
+        w.write(T::DATA.signature());
         w.write(self.0)
     }
 }
@@ -132,6 +137,14 @@ impl<T: Signature + Marshal> Marshal for &[T] {
 
 #[derive(Clone, Copy)]
 pub struct Array<I>(pub I);
+
+impl<I, T> SignatureProxy for Array<I>
+where
+    I: Iterator<Item = T>,
+    T: Signature,
+{
+    type Proxy = [T];
+}
 
 impl<I, T> Marshal for Array<I>
 where
