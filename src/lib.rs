@@ -1,4 +1,4 @@
-#![cfg_attr(not(any(feature = "std", test)), no_std)]
+#![cfg_attr(not(test), no_std)]
 #![feature(
     cast_maybe_uninit,
     const_array,
@@ -9,6 +9,9 @@
     const_try,
     str_as_str
 )]
+
+#[cfg(any(feature = "alloc", test))]
+pub extern crate alloc;
 
 use core::fmt::{self, Debug};
 

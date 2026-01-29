@@ -103,7 +103,7 @@ macro_rules! define_fields {
         $type
     };
     (@owned (ref $type:ty)) => {
-        Box<$type>
+        alloc::boxed::Box<$type>
     };
     (@owned $type:ty) => {
         $type
@@ -120,13 +120,13 @@ macro_rules! define_fields {
             $(pub $field: Option<define_fields!(@ref $type)>,)*
         }
 
-        #[cfg(feature = "std")]
+        #[cfg(feature = "alloc")]
         #[derive(Default, Debug, PartialEq, Eq)]
         pub struct OwnedFields {
             $(pub $field: Option<define_fields!(@owned $type)>,)*
         }
 
-        #[cfg(feature = "std")]
+        #[cfg(feature = "alloc")]
         impl OwnedFields {
             pub fn as_ref(&self) -> Fields<'_> {
                 Fields {
@@ -136,8 +136,9 @@ macro_rules! define_fields {
         }
 
         impl<'a> Fields<'a> {
-            #[cfg(feature = "std")]
+            #[cfg(feature = "alloc")]
             pub fn to_owned(&self) -> OwnedFields {
+                use alloc::borrow::ToOwned;
                 OwnedFields {
                     $($field: self.$field.map(|x| x.to_owned()),)*
                 }
@@ -272,7 +273,7 @@ pub struct Header<'a> {
 //     }
 // }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl Header<'_> {
     pub fn to_owned(&self) -> OwnedHeader {
         OwnedHeader {
@@ -284,7 +285,7 @@ impl Header<'_> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 #[derive(Debug, PartialEq, Eq)]
 pub struct OwnedHeader {
     pub message_type: MessageType,
@@ -293,7 +294,7 @@ pub struct OwnedHeader {
     pub fields: OwnedFields,
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl OwnedHeader {
     pub fn as_ref(&self) -> Header<'_> {
         Header {
@@ -312,8 +313,9 @@ pub struct Message<'a, T> {
 }
 
 impl<'a> Message<'a, &'a [u8]> {
-    #[cfg(feature = "std")]
-    pub fn to_owned(&self) -> OwnedMessage<Box<[u8]>> {
+    #[cfg(feature = "alloc")]
+    pub fn to_owned(&self) -> OwnedMessage<alloc::boxed::Box<[u8]>> {
+        use alloc::borrow::ToOwned;
         OwnedMessage {
             header: self.header.to_owned(),
             body: self.body.to_owned().into(),
@@ -333,15 +335,15 @@ impl<'a> Message<'a, &'a [u8]> {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 #[derive(Debug, PartialEq, Eq)]
 pub struct OwnedMessage<T> {
     pub header: OwnedHeader,
     pub body: T,
 }
 
-#[cfg(feature = "std")]
-impl OwnedMessage<Box<[u8]>> {
+#[cfg(feature = "alloc")]
+impl OwnedMessage<alloc::boxed::Box<[u8]>> {
     pub fn as_ref(&self) -> Message<'_, &[u8]> {
         Message {
             header: self.header.as_ref(),

@@ -1,4 +1,4 @@
-use core::{mem, ops::Deref};
+use core::ops::Deref;
 
 #[repr(transparent)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -48,15 +48,15 @@ macro_rules! impl_string {
                 <$t>::from_bytes(s)
             }
         }
-        #[cfg(feature = "std")]
-        impl std::borrow::ToOwned for $t {
-            type Owned = Box<$t>;
+        #[cfg(feature = "alloc")]
+        impl alloc::borrow::ToOwned for $t {
+            type Owned = alloc::boxed::Box<$t>;
 
             #[inline]
-            fn to_owned(&self) -> Box<$t> {
-                let mut res = Box::new_uninit_slice(self.len());
+            fn to_owned(&self) -> alloc::boxed::Box<$t> {
+                let mut res = alloc::boxed::Box::new_uninit_slice(self.len());
                 res.write_copy_of_slice(self);
-                unsafe { mem::transmute(res.assume_init()) }
+                unsafe { core::mem::transmute(res.assume_init()) }
             }
         }
         impl const AsRef<[u8]> for $t {

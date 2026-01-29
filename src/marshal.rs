@@ -188,10 +188,10 @@ pub fn write<Value: Marshal>(
     }
 }
 
-#[cfg(any(feature = "std", test))]
+#[cfg(any(feature = "alloc", test))]
 #[must_use]
-pub fn marshal<Value: Marshal>(value: Value) -> Box<[u8]> {
-    let mut buf = Box::new_uninit_slice(calc_size(value.clone()));
+pub fn marshal<Value: Marshal>(value: Value) -> alloc::boxed::Box<[u8]> {
+    let mut buf = alloc::boxed::Box::new_uninit_slice(calc_size(value.clone()));
 
     unsafe {
         write_unchecked(value, buf.as_mut_ptr() as _);
