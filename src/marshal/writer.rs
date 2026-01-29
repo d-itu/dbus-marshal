@@ -113,8 +113,8 @@ unsafe impl Write for Span {
 
     fn align_to(&mut self, n: usize) {
         let padding = crate::align_padding(self.len(), n);
-        const ZEROS: [u8; 7] = [0; _];
-        self.write_bytes(unsafe { ZEROS.get_unchecked(..padding) });
+        unsafe { core::ptr::write_bytes(self.cursor, 0, padding) };
+        self.seek(padding);
     }
 
     fn position(&self) -> usize {
