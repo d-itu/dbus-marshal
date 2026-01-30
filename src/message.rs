@@ -1,3 +1,5 @@
+#[cfg(feature = "alloc")]
+use alloc::{borrow::ToOwned, boxed::Box};
 use core::{
     convert::Infallible,
     fmt::{self, Formatter},
@@ -103,7 +105,7 @@ macro_rules! define_fields {
         $type
     };
     (@owned (ref $type:ty)) => {
-        alloc::boxed::Box<$type>
+        Box<$type>
     };
     (@owned $type:ty) => {
         $type
@@ -138,7 +140,6 @@ macro_rules! define_fields {
         impl<'a> Fields<'a> {
             #[cfg(feature = "alloc")]
             pub fn to_owned(&self) -> OwnedFields {
-                use alloc::borrow::ToOwned;
                 OwnedFields {
                     $($field: self.$field.map(|x| x.to_owned()),)*
                 }
@@ -257,22 +258,6 @@ pub struct Header<'a> {
     pub fields: Fields<'a>,
 }
 
-// impl<'a> Header<'a> {
-//     pub fn method_call(
-//         flags: Flags,
-//         serial: NonZeroU32,
-//         path: impl Into<&'a strings::ObjectPath>,
-//         member: impl Into<&'a strings::String>,
-//     ) -> Self {
-//         Self {
-//             message_type: MessageType::MethodCall,
-//             flags,
-//             serial,
-//             fields: Fields::empty().path(path).member(member),
-//         }
-//     }
-// }
-
 #[cfg(feature = "alloc")]
 impl Header<'_> {
     pub fn to_owned(&self) -> OwnedHeader {
@@ -309,16 +294,22 @@ impl OwnedHeader {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Message<'a, T> {
     pub header: Header<'a>,
-    pub body: T,
+    pub arguments: T,
 }
 
+// #[cfg(feature = "alloc")]
+// impl<'a, T: marshal::Marshal> Message<'a, T> {
+//     pub fn marshal(&self) -> Box<[u8]> {
+//         marshal::marshal(self)
+//     }
+// }
+//
 impl<'a> Message<'a, &'a [u8]> {
     #[cfg(feature = "alloc")]
-    pub fn to_owned(&self) -> OwnedMessage<alloc::boxed::Box<[u8]>> {
-        use alloc::borrow::ToOwned;
+    pub fn to_owned(&self) -> OwnedMessage<Box<[u8]>> {
         OwnedMessage {
             header: self.header.to_owned(),
-            body: self.body.to_owned().into(),
+            arguments: self.arguments.to_owned().into(),
         }
     }
     pub fn parse<T: Unmarshal<'a> + MultiSignature>(&self) -> unmarshal::Result<T> {
@@ -330,7 +321,7 @@ impl<'a> Message<'a, &'a [u8]> {
         if signature != T::DATA.signature() {
             Err(Error::UnexpectedType)?
         }
-        let mut reader = unmarshal::Reader::new(self.body);
+        let mut reader = unmarshal::Reader::new(self.arguments);
         reader.read()
     }
 }
@@ -339,27 +330,27 @@ impl<'a> Message<'a, &'a [u8]> {
 #[derive(Debug, PartialEq, Eq)]
 pub struct OwnedMessage<T> {
     pub header: OwnedHeader,
-    pub body: T,
+    pub arguments: T,
 }
 
 #[cfg(feature = "alloc")]
-impl OwnedMessage<alloc::boxed::Box<[u8]>> {
+impl OwnedMessage<Box<[u8]>> {
     pub fn as_ref(&self) -> Message<'_, &[u8]> {
         Message {
             header: self.header.as_ref(),
-            body: &self.body,
+            arguments: &self.arguments,
         }
     }
 }
 
 impl<T: Marshal> Marshal for &Message<'_, T> {
     fn marshal<W: marshal::Write + ?Sized>(self, w: &mut W) {
-        let Message { header, body } = self;
+        let Message { header, arguments } = self;
         w.write_byte(NATIVE_ENDIAN as _);
         w.write_byte(header.message_type as _);
         w.write_byte(header.flags.0);
         w.write_byte(1);
-        let body_len_insertion = w.position();
+        let args_len_insertion = w.position();
         w.seek(4);
         w.write(header.serial);
 
@@ -371,10 +362,10 @@ impl<T: Marshal> Marshal for &Message<'_, T> {
         w.insert(header_len as u32, header_len_insertion);
         w.align_to(8);
 
-        let body_begin = w.position();
-        body.marshal(w);
-        let body_len = w.position() - body_begin;
-        w.insert(body_len as u32, body_len_insertion);
+        let args_begin = w.position();
+        arguments.marshal(w);
+        let args_len = w.position() - args_begin;
+        w.insert(args_len as u32, args_len_insertion);
     }
 }
 
@@ -387,7 +378,7 @@ impl<'a> Unmarshal<'a> for Message<'a, &'a [u8]> {
         let message_type = r.read_byte().and_then(MessageType::from_u8)?;
         let flags = r.read_byte().map(Flags)?;
         let _version = r.read_byte()?;
-        let body_len: u32 = r.read()?;
+        let args_len: u32 = r.read()?;
         let serial = r.read()?;
         let serial = NonZeroU32::new(serial).ok_or(Error::InvalidHeader)?;
         let fields = r.read()?;
@@ -398,10 +389,13 @@ impl<'a> Unmarshal<'a> for Message<'a, &'a [u8]> {
             fields,
         };
         r.align_to(8)?;
-        let body_len = body_len as usize;
-        let body = r.remaining().get(..body_len).ok_or(Error::NotEnoughData)?;
-        r.seek(body_len)?;
-        Ok(Self { header, body })
+        let args_len = args_len as usize;
+        let args = r.remaining().get(..args_len).ok_or(Error::NotEnoughData)?;
+        r.seek(args_len)?;
+        Ok(Self {
+            header,
+            arguments: args,
+        })
     }
 }
 
@@ -459,7 +453,7 @@ fn test_marshal() {
     dbg!(&header);
     let msg = Message {
         header,
-        body: strings::String::from_str(":1.1758"),
+        arguments: strings::String::from_str(":1.1758"),
     };
     let res = marshal::marshal(&msg);
     dbg!(crate::show_bytes(&res));
@@ -470,7 +464,7 @@ fn test_unmarshal() {
     let header = test_header();
     let msg = Message {
         header,
-        body: strings::String::from_str(":1.1758"),
+        arguments: strings::String::from_str(":1.1758"),
     };
     let size = marshal::calc_size(&msg);
     let mut buf = Box::new_zeroed_slice(size * 2);
@@ -484,4 +478,164 @@ fn test_unmarshal() {
     let msg = iter.next().unwrap().unwrap();
     assert_eq!(msg.header, header);
     assert_eq!(iter.next(), None);
+}
+
+#[derive(Clone, Copy)]
+pub struct Proxy<'a> {
+    pub destination: &'a strings::String,
+    pub path: &'a strings::ObjectPath,
+    pub interface: &'a strings::String,
+}
+
+impl<'a> Proxy<'a> {
+    fn fields(&self) -> Fields<'a> {
+        Fields::empty()
+            .destination(self.destination)
+            .path(self.path)
+            .interface(self.interface)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Serial(u32);
+
+impl Default for Serial {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Serial {
+    pub const fn new() -> Self {
+        Self(0)
+    }
+    fn get(&self) -> NonZeroU32 {
+        unsafe { NonZeroU32::new_unchecked(self.0) }
+    }
+    fn next(&mut self) -> NonZeroU32 {
+        self.0 += 1;
+        self.get()
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn method_call<'a, T: Marshal + MultiSignature>(
+        &mut self,
+        flags: Flags,
+        proxy: Proxy<'_>,
+        member: impl Into<&'a strings::String>,
+        arguments: T,
+    ) -> Box<[u8]> {
+        let sig = T::DATA;
+        let signature = sig.signature();
+        let fields = Fields {
+            signature: if signature.is_empty() {
+                None
+            } else {
+                Some(signature)
+            },
+            member: Some(member.into()),
+            ..proxy.fields()
+        };
+        marshal::marshal(&Message {
+            header: Header {
+                message_type: MessageType::MethodCall,
+                flags,
+                serial: self.next(),
+                fields,
+            },
+            arguments,
+        })
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn method_return<T: Marshal + MultiSignature>(
+        &mut self,
+        method_call: &Header,
+        arguments: T,
+    ) -> Box<[u8]> {
+        let sig = T::DATA;
+        let signature = sig.signature();
+        let fields = Fields {
+            signature: if signature.is_empty() {
+                None
+            } else {
+                Some(signature)
+            },
+            reply_serial: Some(method_call.serial.get()),
+            destination: method_call.fields.sender,
+            ..Fields::empty()
+        };
+        marshal::marshal(&Message {
+            header: Header {
+                message_type: MessageType::MethodReturn,
+                flags: Flags::empty(),
+                serial: self.next(),
+                fields,
+            },
+            arguments,
+        })
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn error<'a, T: Marshal + MultiSignature>(
+        &mut self,
+        name: impl Into<&'a strings::String>,
+        method_call: &Header,
+        arguments: T,
+    ) -> Box<[u8]> {
+        let sig = T::DATA;
+        let signature = sig.signature();
+        let fields = Fields {
+            signature: if signature.is_empty() {
+                None
+            } else {
+                Some(signature)
+            },
+            error_name: Some(name.into()),
+            reply_serial: Some(method_call.serial.get()),
+            destination: method_call.fields.sender,
+            ..Fields::empty()
+        };
+        marshal::marshal(&Message {
+            header: Header {
+                message_type: MessageType::Error,
+                flags: Flags::empty(),
+                serial: self.next(),
+                fields,
+            },
+            arguments,
+        })
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn signal<'a, 'b, 'c, T: Marshal + MultiSignature>(
+        &mut self,
+        path: impl Into<&'a strings::ObjectPath>,
+        interface: impl Into<&'b strings::String>,
+        member: impl Into<&'c strings::String>,
+        arguments: T,
+    ) -> Box<[u8]> {
+        let sig = T::DATA;
+        let signature = sig.signature();
+        let fields = Fields {
+            signature: if signature.is_empty() {
+                None
+            } else {
+                Some(signature)
+            },
+            path: Some(path.into()),
+            interface: Some(interface.into()),
+            member: Some(member.into()),
+            ..Fields::empty()
+        };
+        marshal::marshal(&Message {
+            header: Header {
+                message_type: MessageType::Signal,
+                flags: Flags::empty(),
+                serial: self.next(),
+                fields,
+            },
+            arguments,
+        })
+    }
 }
