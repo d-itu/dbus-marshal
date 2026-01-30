@@ -17,8 +17,11 @@ impl<IoError: Debug> From<IoError> for Error<IoError> {
 
 pub trait Io {
     type Error: Debug;
-    fn read(&mut self) -> impl Future<Output = Result<&[u8], Self::Error>>;
-    fn write(&mut self, data: &[u8]) -> impl Future<Output = Result<(), Self::Error>>;
+    fn read(&mut self) -> impl Future<Output = Result<impl AsRef<[u8]>, Self::Error>>;
+    fn write(
+        &mut self,
+        data: impl AsRef<[u8]> + 'static,
+    ) -> impl Future<Output = Result<(), Self::Error>>;
 }
 
 const fn digits(mut x: u32) -> u32 {
@@ -92,13 +95,13 @@ pub async fn authenticate<T: Io>(io: &mut T, uid: u32) -> Result<(), Error<T::Er
         buf.try_extend_from_slice(&to_ascii(digit as _)).ok();
     }
     buf.try_extend_from_slice(b"\r\n").ok();
-    io.write(buf.as_slice()).await?;
-    if !io.read().await?.starts_with(b"OK") {
+    io.write(buf).await?;
+    if !io.read().await?.as_ref().starts_with(b"OK") {
         Err(Error::AuthenticationFailed)?
     }
 
     io.write(b"NEGOTIATE_UNIX_FD\r\nBEGIN\r\n").await?;
-    if !io.read().await?.starts_with(b"AGREE_UNIX_FD\r\n") {
+    if !io.read().await?.as_ref().starts_with(b"AGREE_UNIX_FD\r\n") {
         Err(Error::AuthenticationFailed)?
     }
 
