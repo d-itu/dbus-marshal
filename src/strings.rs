@@ -38,6 +38,12 @@ macro_rules! impl_string {
                 write!(f, "{s:?}")
             }
         }
+        impl core::fmt::Display for $t {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                let s = unsafe { core::str::from_utf8_unchecked(self.as_bytes()) };
+                write!(f, "{s}")
+            }
+        }
         impl<'a> const From<&'a str> for &'a $t {
             fn from(s: &'a str) -> Self {
                 <$t>::from_str(s)
