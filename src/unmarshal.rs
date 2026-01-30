@@ -1,5 +1,7 @@
 use core::{marker::PhantomData, result, slice};
 
+use thiserror::Error;
+
 use crate::{
     aligned,
     signature::{Node, Signature},
@@ -7,15 +9,23 @@ use crate::{
     types::*,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Error)]
 pub enum Error {
+    #[error("signature has invalid character")]
     SignatureInvalidChar,
+    #[error("unexpected type")]
     UnexpectedType,
+    #[error("invalid entry size")]
     InvalidEntrySize,
+    #[error("nesting mismatched")]
     NestingMismatched,
+    #[error("not enough data")]
     NotEnoughData,
+    #[error("invalid header")]
     InvalidHeader,
+    #[error("unsupported endian")]
     UnsupportedEndian,
+    #[error("nesting depth exceeded")]
     NestingDepthExceeded,
 }
 
@@ -213,5 +223,5 @@ impl<'a, T: Unmarshal<'a> + Signature> Unmarshal<'a> for ArrayIter<'a, T> {
     }
 }
 
-mod iter;
 pub use iter::*;
+mod iter;

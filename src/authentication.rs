@@ -1,18 +1,16 @@
 use core::fmt::Debug;
 
 use arrayvec::ArrayVec;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error<IoError: Debug> {
+    #[error("authentication failed")]
     AuthenticationFailed,
+    #[error("negotiation failed")]
     NegotiationFailed,
-    Io(IoError),
-}
-
-impl<IoError: Debug> From<IoError> for Error<IoError> {
-    fn from(value: IoError) -> Self {
-        Error::Io(value)
-    }
+    #[error("io error: {0}")]
+    Io(#[from] IoError),
 }
 
 pub trait Io {
