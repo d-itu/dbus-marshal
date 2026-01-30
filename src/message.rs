@@ -506,6 +506,9 @@ impl Default for Serial {
 }
 
 impl Serial {
+    pub const fn from_raw(value: u32) -> Self {
+        Self(value)
+    }
     pub const fn new() -> Self {
         Self(0)
     }

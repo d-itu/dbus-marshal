@@ -9,7 +9,7 @@ pub enum Error<IoError: Debug> {
     AuthenticationFailed,
     #[error("negotiation failed")]
     NegotiationFailed,
-    #[error("io error: {0}")]
+    #[error(transparent)]
     Io(#[from] IoError),
 }
 
