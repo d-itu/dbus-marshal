@@ -312,7 +312,7 @@ impl<'a> Message<'a, &'a [u8]> {
             .signature
             .unwrap_or(&strings::Signature::from_bytes(b""));
         if signature != T::DATA.signature() {
-            Err(Error::UnexpectedType)?
+            Err(Error::InvalidArgs)?
         }
         let mut reader = unmarshal::Reader::new(self.arguments);
         reader.read()
@@ -481,7 +481,7 @@ pub struct Proxy<'a> {
 }
 
 impl<'a> Proxy<'a> {
-    fn fields(&self) -> Fields<'a> {
+    pub fn fields(&self) -> Fields<'a> {
         Fields::empty()
             .destination(self.destination)
             .path(self.path)

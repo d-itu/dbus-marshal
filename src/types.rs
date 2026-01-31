@@ -177,7 +177,7 @@ macro_rules! define_dict {
                             $field: val.0
                         }))
                     })*
-                    _ => Err($crate::unmarshal::Error::UnexpectedType)?
+                    _ => Err($crate::unmarshal::Error::InvalidArgs)?
                 }
             }
         }
@@ -202,7 +202,7 @@ macro_rules! define_dict {
                             $field: val.0
                         }))
                     })*
-                    _ => Err($crate::unmarshal::Error::UnexpectedType)?
+                    _ => Err($crate::unmarshal::Error::InvalidArgs)?
                 }
             }
         }

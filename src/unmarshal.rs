@@ -11,22 +11,25 @@ use crate::{
 
 #[derive(Clone, Copy, Debug, PartialEq, Error)]
 pub enum Error {
-    #[error("signature has invalid character")]
-    SignatureInvalidChar,
-    #[error("unexpected type")]
-    UnexpectedType,
-    #[error("invalid entry size")]
-    InvalidEntrySize,
-    #[error("nesting mismatched")]
-    NestingMismatched,
+    #[error("invalid args")]
+    InvalidArgs,
     #[error("not enough data")]
     NotEnoughData,
     #[error("invalid header")]
     InvalidHeader,
     #[error("unsupported endian")]
     UnsupportedEndian,
-    #[error("nesting depth exceeded")]
-    NestingDepthExceeded,
+}
+
+impl Error {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Error::InvalidArgs => "org.freedesktop.DBus.Error.InvalidArgs",
+            Error::NotEnoughData | Error::InvalidHeader | Error::UnsupportedEndian => {
+                "org.freedesktop.DBus.Error.InternalError"
+            }
+        }
+    }
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -156,7 +159,7 @@ impl<'a, T: Unmarshal<'a> + Signature> Unmarshal<'a> for Variant<T> {
     fn unmarshal(r: &mut Reader<'a>) -> Result<Self> {
         let sig: &strings::Signature = r.read()?;
         if sig != T::DATA.signature() {
-            Err(Error::UnexpectedType)?
+            Err(Error::InvalidArgs)?
         }
         let inner = r.read()?;
         Ok(Self(inner))
