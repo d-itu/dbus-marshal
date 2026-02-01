@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     aligned,
-    signature::{Node, Signature},
+    signature::{Node, Signature, SignatureProxy},
     strings,
     types::*,
 };
@@ -195,6 +195,10 @@ impl<'a, T: Unmarshal<'a> + StructConstructor> Unmarshal<'a> for Struct<T> {
 pub struct ArrayIter<'a, T> {
     reader: Reader<'a>,
     marker: PhantomData<T>,
+}
+
+impl<'a, T: Signature> SignatureProxy for ArrayIter<'a, T> {
+    type Proxy = [T];
 }
 
 impl<'a, T: Signature + Unmarshal<'a>> ArrayIter<'a, T> {
