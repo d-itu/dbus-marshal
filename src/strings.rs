@@ -83,6 +83,12 @@ macro_rules! impl_string {
                 self.to_owned()
             }
         }
+        #[cfg(feature = "alloc")]
+        impl $t {
+            pub fn into_boxed_bytes(self: Box<Self>) -> Box<[u8]> {
+                unsafe { mem::transmute(self) }
+            }
+        }
         impl const AsRef<[u8]> for $t {
             fn as_ref(&self) -> &[u8] {
                 self.as_bytes()
