@@ -77,6 +77,12 @@ macro_rules! impl_string {
                 unsafe { mem::transmute(s) }
             }
         }
+        #[cfg(feature = "alloc")]
+        impl Clone for Box<$t> {
+            fn clone(&self) -> Self {
+                self.to_owned()
+            }
+        }
         impl const AsRef<[u8]> for $t {
             fn as_ref(&self) -> &[u8] {
                 self.as_bytes()
