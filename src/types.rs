@@ -170,7 +170,7 @@ macro_rules! define_dict {
         impl<$lifetime> $crate::unmarshal::Unmarshal<$lifetime> for $entry<$lifetime> {
             fn unmarshal(r: &mut $crate::unmarshal::Reader<$lifetime>) -> $crate::unmarshal::Result<Self> {
                 let key: &$crate::String = r.read()?;
-                match unsafe { core::str::from_utf8_unchecked(key) } {
+                match unsafe { str::from_utf8_unchecked(key) } {
                     $(stringify!($field) => {
                         let val: Variant<$type> = r.read()?;
                         Ok(Self($key::$field, $value {
@@ -195,7 +195,7 @@ macro_rules! define_dict {
         impl $crate::unmarshal::Unmarshal<'_> for $entry {
             fn unmarshal(r: &mut $crate::unmarshal::Reader<'_>) -> $crate::unmarshal::Result<Self> {
                 let key: &$crate::String = r.read()?;
-                match unsafe { core::str::from_utf8_unchecked(key) } {
+                match unsafe { str::from_utf8_unchecked(key) } {
                     $(stringify!($field) => {
                         let val: Variant<$type> = r.read()?;
                         Ok(Self($key::$field, $value {

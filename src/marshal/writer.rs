@@ -113,7 +113,7 @@ unsafe impl Write for Span {
 
     fn align_to(&mut self, n: usize) {
         let padding = crate::align_padding(self.len(), n);
-        unsafe { core::ptr::write_bytes(self.cursor, 0, padding) };
+        unsafe { ptr::write_bytes(self.cursor, 0, padding) };
         self.seek(padding);
     }
 

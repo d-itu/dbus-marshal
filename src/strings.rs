@@ -1,4 +1,10 @@
-use core::ops::Deref;
+#[cfg(feature = "alloc")]
+use alloc::{borrow::ToOwned, boxed::Box};
+use core::{
+    fmt::{self, Debug, Display, Formatter},
+    mem,
+    ops::Deref,
+};
 
 #[repr(transparent)]
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -19,7 +25,7 @@ macro_rules! impl_string {
                 &self.0
             }
             pub const fn from_bytes(bytes: &[u8]) -> &Self {
-                unsafe { core::mem::transmute(bytes) }
+                unsafe { mem::transmute(bytes) }
             }
             pub const fn from_str(bytes: &str) -> &Self {
                 <$t>::from_bytes(bytes.as_bytes())
@@ -32,15 +38,15 @@ macro_rules! impl_string {
                 self.as_bytes()
             }
         }
-        impl core::fmt::Debug for $t {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                let s = unsafe { core::str::from_utf8_unchecked(self.as_bytes()) };
+        impl Debug for $t {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                let s = unsafe { str::from_utf8_unchecked(self.as_bytes()) };
                 write!(f, "{s:?}")
             }
         }
-        impl core::fmt::Display for $t {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                let s = unsafe { core::str::from_utf8_unchecked(self.as_bytes()) };
+        impl Display for $t {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                let s = unsafe { str::from_utf8_unchecked(self.as_bytes()) };
                 write!(f, "{s}")
             }
         }
@@ -55,14 +61,20 @@ macro_rules! impl_string {
             }
         }
         #[cfg(feature = "alloc")]
-        impl alloc::borrow::ToOwned for $t {
-            type Owned = alloc::boxed::Box<$t>;
+        impl ToOwned for $t {
+            type Owned = Box<$t>;
 
             #[inline]
-            fn to_owned(&self) -> alloc::boxed::Box<$t> {
-                let mut res = alloc::boxed::Box::new_uninit_slice(self.len());
+            fn to_owned(&self) -> Box<$t> {
+                let mut res = Box::new_uninit_slice(self.len());
                 res.write_copy_of_slice(self);
-                unsafe { core::mem::transmute(res.assume_init()) }
+                unsafe { mem::transmute(res.assume_init()) }
+            }
+        }
+        #[cfg(feature = "alloc")]
+        impl From<Box<[u8]>> for Box<$t> {
+            fn from(s: Box<[u8]>) -> Self {
+                unsafe { mem::transmute(s) }
             }
         }
         impl const AsRef<[u8]> for $t {

@@ -95,7 +95,7 @@ unsafe impl<T: SignatureProxy + ?Sized> Signature for T {
 macro_rules! impl_signature {
     ($($t:ty = $s:literal),* $(,)?) => {
         $(unsafe impl Signature for $t {
-            const ALIGNMENT: usize = core::mem::align_of::<Self>();
+            const ALIGNMENT: usize = mem::align_of::<Self>();
         })*
         $(unsafe impl MultiSignature for $t {
             type Data = u8;

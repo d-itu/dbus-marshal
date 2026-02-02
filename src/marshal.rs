@@ -1,4 +1,7 @@
-use core::mem::MaybeUninit;
+use core::{
+    mem::{self, MaybeUninit},
+    num::NonZero,
+};
 
 use crate::{
     marshal::writer::*,
@@ -15,7 +18,7 @@ macro_rules! impl_marshal {
     ($($t: ty),* $(,)?) => {
         $(impl Marshal for $t {
             fn marshal<W: Write + ?Sized>(self, w: &mut W) {
-                w.align_to(core::mem::align_of::<$t>());
+                w.align_to(mem::align_of::<$t>());
                 w.write_bytes(&self.to_ne_bytes());
             }
         })*
@@ -26,7 +29,7 @@ impl_marshal!(u8, i16, u16, i32, u32, i64, u64, f64);
 
 macro_rules! impl_non_zero {
     ($($t: ty),* $(,)?) => {
-        $(impl Marshal for core::num::NonZero<$t> {
+        $(impl Marshal for NonZero<$t> {
             fn marshal<W: Write + ?Sized>(self, w: &mut W) {
                 w.write(self.get());
             }

@@ -473,17 +473,17 @@ fn test_unmarshal() {
     assert_eq!(iter.next(), None);
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Proxy<'a> {
-    pub destination: &'a strings::String,
+    pub name: &'a strings::String,
     pub path: &'a strings::ObjectPath,
     pub interface: &'a strings::String,
 }
 
 impl<'a> Proxy<'a> {
-    pub fn fields(&self) -> Fields<'a> {
+    pub fn method_call(&self) -> Fields<'a> {
         Fields::empty()
-            .destination(self.destination)
+            .destination(self.name)
             .path(self.path)
             .interface(self.interface)
     }

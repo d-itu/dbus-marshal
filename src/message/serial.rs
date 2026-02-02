@@ -42,7 +42,7 @@ impl Serial {
                 Some(signature)
             },
             member: Some(member.into()),
-            ..proxy.fields()
+            ..proxy.method_call()
         };
         marshal::marshal(&Message {
             header: Header {

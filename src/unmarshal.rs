@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, result, slice};
+use core::{marker::PhantomData, mem, result, slice};
 
 use thiserror::Error;
 
@@ -109,13 +109,13 @@ macro_rules! impl_unmarshal {
     ($($t: ty),* $(,)?) => {
         $(impl Unmarshal<'_> for $t {
             fn unmarshal(r: &mut Reader) -> Result<Self> {
-                r.align_to(core::mem::align_of::<Self>())?;
+                r.align_to(mem::align_of::<Self>())?;
                 let bytes = r
                     .remaining()
-                    .get(..core::mem::size_of::<Self>())
+                    .get(..mem::size_of::<Self>())
                     .ok_or(Error::NotEnoughData)?;
                 let res = Self::from_ne_bytes(bytes.as_array().copied().unwrap());
-                r.seek_unchecked(core::mem::size_of::<Self>());
+                r.seek_unchecked(mem::size_of::<Self>());
                 Ok(res)
             }
         })*
