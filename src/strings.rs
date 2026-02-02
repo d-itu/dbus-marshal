@@ -80,7 +80,8 @@ macro_rules! impl_string {
         #[cfg(feature = "alloc")]
         impl Clone for Box<$t> {
             fn clone(&self) -> Self {
-                self.to_owned()
+                let slice: &$t = &*self;
+                slice.to_owned()
             }
         }
         #[cfg(feature = "alloc")]
@@ -98,3 +99,10 @@ macro_rules! impl_string {
 }
 
 impl_string!(Signature, String, ObjectPath);
+
+#[test]
+#[cfg(feature = "alloc")]
+fn string_clone() {
+    let s = String::from_str("hello").to_owned();
+    let _s = s.clone();
+}
