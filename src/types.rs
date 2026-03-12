@@ -1,9 +1,11 @@
 #![macro_use]
 
+use core::convert::Infallible;
+
 use crate::signature::{self, MultiSignature, Signature};
 
 #[derive(Clone, Copy)]
-pub struct Variant<T: ?Sized>(pub T);
+pub struct Variant<T: ?Sized = Infallible>(pub T);
 
 unsafe impl<T> MultiSignature for Variant<T> {
     type Data = u8;

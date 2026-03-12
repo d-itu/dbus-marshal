@@ -1,8 +1,7 @@
 #[cfg(feature = "alloc")]
 use alloc::{borrow::ToOwned, boxed::Box};
 use core::{
-    convert::Infallible,
-    fmt::{self, Formatter},
+    fmt::{self, Debug, Formatter},
     mem,
     num::NonZeroU32,
 };
@@ -84,7 +83,7 @@ impl Flags {
     }
 }
 
-impl core::fmt::Debug for Flags {
+impl Debug for Flags {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("Flags")
             .field("no_reply_expected", &self.no_reply_expected())
@@ -235,7 +234,7 @@ struct Entry<'a> {
 }
 
 impl SignatureProxy for Entry<'_> {
-    type Proxy = types::Entry<u8, types::Variant<Infallible>>;
+    type Proxy = types::Entry<u8, types::Variant>;
 }
 
 define_fields! {
