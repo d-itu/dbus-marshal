@@ -18,10 +18,10 @@ impl Serial {
     pub const fn new() -> Self {
         Self(Cell::new(0))
     }
-    fn get(&self) -> NonZeroU32 {
+    pub fn get(&self) -> NonZeroU32 {
         unsafe { NonZeroU32::new_unchecked(self.0.get()) }
     }
-    fn next(&self) -> NonZeroU32 {
+    pub fn next(&self) -> NonZeroU32 {
         self.0.set(self.0.take() + 1);
         self.get()
     }
