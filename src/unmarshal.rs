@@ -192,9 +192,16 @@ impl<'a, T: Unmarshal<'a> + StructConstructor> Unmarshal<'a> for Struct<T> {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct ArrayIter<'a, T> {
     reader: Reader<'a>,
     marker: PhantomData<T>,
+}
+
+impl<'a, T: Clone> crate::marshal::Marshal for ArrayIter<'a, T> {
+    fn marshal<W: crate::marshal::Write + ?Sized>(self, _: &mut W) {
+        unimplemented!()
+    }
 }
 
 impl<T: Signature> SignatureProxy for ArrayIter<'_, T> {

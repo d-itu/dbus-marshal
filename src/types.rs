@@ -127,7 +127,7 @@ macro_rules! define_dict {
             $($field_pub $field: Option<$type>,)*
         }
         impl<$($a)?> $crate::signature::SignatureProxy for $name<$($a)?> {
-            type Proxy<'a> = [$crate::Entry<&'static str, $crate::Variant<()>>];
+            type Proxy<'_a> = [$crate::Entry<&'static str, $crate::Variant<()>>];
         }
         impl<$($a)?> $crate::marshal::Marshal for $name<$($a)?> where Self: Clone {
             fn marshal<W: $crate::marshal::Write + ?Sized>(self, w: &mut W) {
@@ -136,13 +136,13 @@ macro_rules! define_dict {
                 $(if let Some(value) = self.$field {
                     w.align_to(8);
                     w.write(stringify!($field));
-                    w.write(Variant(value));
+                    w.write($crate::Variant(value));
                 })*
                 let len = w.position() - begin;
                 w.insert(len as u32, insert_pos);
             }
         }
-        crate::define_dict!(@unmarshal $name $entry $key $value $($a)? $($field $type)*);
+        $crate::define_dict!(@unmarshal $name $entry $key $value $($a)? $($field $type)*);
         #[allow(non_camel_case_types)]
         enum $key {
             $($field),*
@@ -174,7 +174,7 @@ macro_rules! define_dict {
                 let key: &$crate::String = r.read()?;
                 match unsafe { str::from_utf8_unchecked(key) } {
                     $(stringify!($field) => {
-                        let val: Variant<$type> = r.read()?;
+                        let val: $crate::Variant<$type> = r.read()?;
                         Ok(Self($key::$field, $value {
                             $field: val.0
                         }))
