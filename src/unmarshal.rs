@@ -197,8 +197,8 @@ pub struct ArrayIter<'a, T> {
     marker: PhantomData<T>,
 }
 
-impl<'a, T: Signature> SignatureProxy for ArrayIter<'a, T> {
-    type Proxy<'b> = [T];
+impl<T: Signature> SignatureProxy for ArrayIter<'_, T> {
+    type Proxy<'a> = [T];
 }
 
 impl<'a, T: Signature + Unmarshal<'a>> ArrayIter<'a, T> {

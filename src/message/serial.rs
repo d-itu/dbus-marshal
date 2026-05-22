@@ -1,9 +1,9 @@
-use core::num::NonZeroU32;
+use core::{cell::Cell, num::NonZeroU32};
 
 use super::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Serial(u32);
+#[derive(Debug, Clone)]
+pub struct Serial(Cell<u32>);
 
 impl Default for Serial {
     fn default() -> Self {
@@ -13,21 +13,21 @@ impl Default for Serial {
 
 impl Serial {
     pub const fn from_raw(value: u32) -> Self {
-        Self(value)
+        Self(Cell::new(value))
     }
     pub const fn new() -> Self {
-        Self(0)
+        Self(Cell::new(0))
     }
     fn get(&self) -> NonZeroU32 {
-        unsafe { NonZeroU32::new_unchecked(self.0) }
+        unsafe { NonZeroU32::new_unchecked(self.0.get()) }
     }
-    fn next(&mut self) -> NonZeroU32 {
-        self.0 += 1;
+    fn next(&self) -> NonZeroU32 {
+        self.0.set(self.0.take() + 1);
         self.get()
     }
 
     pub fn method_call<'a, T: Marshal + MultiSignature>(
-        &mut self,
+        &self,
         flags: Flags,
         proxy: Proxy<'_>,
         member: impl Into<&'a strings::String>,
@@ -56,7 +56,7 @@ impl Serial {
     }
 
     pub fn method_return<T: Marshal + MultiSignature>(
-        &mut self,
+        &self,
         method_call: &Header,
         arguments: T,
     ) -> Box<[u8]> {
@@ -84,7 +84,7 @@ impl Serial {
     }
 
     pub fn error<'a, T: Marshal + MultiSignature>(
-        &mut self,
+        &self,
         name: impl Into<&'a strings::String>,
         method_call: &Header,
         arguments: T,
@@ -114,7 +114,7 @@ impl Serial {
     }
 
     pub fn signal<'a, 'b, 'c, T: Marshal + MultiSignature>(
-        &mut self,
+        &self,
         path: impl Into<&'a strings::ObjectPath>,
         interface: impl Into<&'b strings::String>,
         member: impl Into<&'c strings::String>,
