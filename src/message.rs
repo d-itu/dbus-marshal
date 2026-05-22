@@ -234,7 +234,7 @@ struct Entry<'a> {
 }
 
 impl SignatureProxy for Entry<'_> {
-    type Proxy = types::Entry<u8, types::Variant>;
+    type Proxy<'a> = types::Entry<u8, types::Variant>;
 }
 
 define_fields! {

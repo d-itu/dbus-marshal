@@ -146,7 +146,7 @@ where
     I: Iterator<Item = T>,
     T: Signature,
 {
-    type Proxy = [T];
+    type Proxy<'a> = [T];
 }
 
 impl<I, T> Marshal for Array<I>
@@ -211,7 +211,7 @@ mod writer;
 fn test_marshal() {
     let x = marshal(&[2u64][..]);
     #[rustfmt::skip]
-    assert_eq!(x.as_slice(), [
+    assert_eq!(x.as_ref(), [
         8, 0, 0, 0,
         0, 0, 0, 0,
         2, 0, 0, 0, 0, 0, 0, 0
@@ -219,7 +219,7 @@ fn test_marshal() {
 
     let x = marshal(&[Entry(2i32, 23u8), Entry(3i32, 24u8)][..]);
     #[rustfmt::skip]
-    assert_eq!(x.as_slice(), [
+    assert_eq!(x.as_ref(), [
         13, 0, 0, 0,
         0, 0, 0, 0,
 
@@ -237,7 +237,7 @@ fn test_marshal() {
         ][..],
     );
     #[rustfmt::skip]
-    assert_eq!(x.as_slice(), [
+    assert_eq!(x.as_ref(), [
         13, 0, 0, 0,
         0, 0, 0, 0,
 

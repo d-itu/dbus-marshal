@@ -76,15 +76,15 @@ pub unsafe trait Signature: MultiSignature {
 }
 
 pub trait SignatureProxy {
-    type Proxy: Signature + ?Sized;
+    type Proxy<'a>: Signature + ?Sized;
 }
 
 impl<T: Signature + ?Sized> SignatureProxy for &T {
-    type Proxy = T;
+    type Proxy<'a> = T;
 }
 
 unsafe impl<T: SignatureProxy + ?Sized> MultiSignature for T {
-    type Data = <T::Proxy as MultiSignature>::Data;
+    type Data = <T::Proxy<'static> as MultiSignature>::Data;
     const DATA: Self::Data = T::Proxy::DATA;
 }
 

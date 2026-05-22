@@ -4,14 +4,12 @@
     const_array,
     const_cmp,
     const_convert,
-    const_destruct,
     const_trait_impl,
-    const_try,
-    str_as_str
+    const_try
 )]
 
 #[cfg(any(feature = "alloc", test))]
-pub extern crate alloc;
+extern crate alloc;
 
 use core::fmt::{self, Debug};
 

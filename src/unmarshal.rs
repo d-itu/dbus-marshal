@@ -198,7 +198,7 @@ pub struct ArrayIter<'a, T> {
 }
 
 impl<'a, T: Signature> SignatureProxy for ArrayIter<'a, T> {
-    type Proxy = [T];
+    type Proxy<'b> = [T];
 }
 
 impl<'a, T: Signature + Unmarshal<'a>> ArrayIter<'a, T> {

@@ -127,7 +127,7 @@ macro_rules! define_dict {
             $($field_pub $field: Option<$type>,)*
         }
         impl<$($a)?> $crate::signature::SignatureProxy for $name<$($a)?> {
-            type Proxy = [$crate::Entry<&'static str, $crate::Variant<()>>];
+            type Proxy<'a> = [$crate::Entry<&'static str, $crate::Variant<()>>];
         }
         impl<$($a)?> $crate::marshal::Marshal for $name<$($a)?> where Self: Clone {
             fn marshal<W: $crate::marshal::Write + ?Sized>(self, w: &mut W) {
@@ -167,7 +167,7 @@ macro_rules! define_dict {
         }
         struct $entry<'a>($key, $value<'a>);
         impl $crate::signature::SignatureProxy for $entry<'_> {
-            type Proxy = $crate::Entry<&'static str, $crate::Variant<()>>;
+            type Proxy<'a> = $crate::Entry<&'static str, $crate::Variant<()>>;
         }
         impl<$lifetime> $crate::unmarshal::Unmarshal<$lifetime> for $entry<$lifetime> {
             fn unmarshal(r: &mut $crate::unmarshal::Reader<$lifetime>) -> $crate::unmarshal::Result<Self> {
@@ -192,7 +192,7 @@ macro_rules! define_dict {
         }
         struct $entry($key, $value);
         impl $crate::signature::SignatureProxy for $entry {
-            type Proxy = $crate::Entry<&'static str, $crate::Variant<()>>;
+            type Proxy<'a> = $crate::Entry<&'static str, $crate::Variant<()>>;
         }
         impl $crate::unmarshal::Unmarshal<'_> for $entry {
             fn unmarshal(r: &mut $crate::unmarshal::Reader<'_>) -> $crate::unmarshal::Result<Self> {
