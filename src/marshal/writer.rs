@@ -23,11 +23,11 @@ pub unsafe trait Write {
 
     fn write_byte(&mut self, byte: u8);
 
-    fn write<T: Marshal>(&mut self, v: T) {
+    fn write<T: Marshal + ?Sized>(&mut self, v: &T) {
         v.marshal(self);
     }
 
-    fn insert<T: Marshal>(&mut self, v: T, pos: usize);
+    fn insert<T: Marshal>(&mut self, v: &T, pos: usize);
 }
 
 unsafe impl Write for usize {
@@ -47,7 +47,7 @@ unsafe impl Write for usize {
         *self += 1;
     }
 
-    fn insert<T: Marshal>(&mut self, _: T, _: usize) {}
+    fn insert<T: Marshal>(&mut self, _: &T, _: usize) {}
 }
 
 pub struct Span {
@@ -89,7 +89,7 @@ unsafe impl Write for Cursor {
         unimplemented!()
     }
 
-    fn insert<T: Marshal>(&mut self, _: T, _: usize) {
+    fn insert<T: Marshal>(&mut self, _: &T, _: usize) {
         unimplemented!()
     }
 }
@@ -121,7 +121,7 @@ unsafe impl Write for Span {
         self.len()
     }
 
-    fn insert<T: Marshal>(&mut self, v: T, pos: usize) {
+    fn insert<T: Marshal>(&mut self, v: &T, pos: usize) {
         Cursor(unsafe { self.begin.add(pos) }).write(v)
     }
 }

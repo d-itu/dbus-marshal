@@ -79,10 +79,6 @@ pub trait SignatureProxy {
     type Proxy<'a>: Signature + ?Sized;
 }
 
-impl<T: Signature + ?Sized> SignatureProxy for &T {
-    type Proxy<'a> = T;
-}
-
 unsafe impl<T: SignatureProxy + ?Sized> MultiSignature for T {
     type Data = <T::Proxy<'static> as MultiSignature>::Data;
     const DATA: Self::Data = T::Proxy::DATA;
@@ -163,6 +159,34 @@ unsafe impl<T: Signature> MultiSignature for [T] {
 unsafe impl<T: Signature> Signature for [T] {
     const ALIGNMENT: usize = 4;
 }
+unsafe impl<T: Signature> MultiSignature for &[T] {
+    type Data = Pair<u8, T::Data>;
+    const DATA: Self::Data = Pair(b'a', T::DATA);
+}
+unsafe impl<T: Signature> Signature for &[T] {
+    const ALIGNMENT: usize = 4;
+}
+
+macro_rules! impl_signature_for_unsized {
+    ($($ty:ty),* $(,)?) => {
+        $(
+            unsafe impl MultiSignature for &$ty {
+                type Data = <$ty as MultiSignature>::Data;
+                const DATA: Self::Data = <$ty as MultiSignature>::DATA;
+            }
+            unsafe impl Signature for &$ty {
+                const ALIGNMENT: usize = <$ty as Signature>::ALIGNMENT;
+            }
+        )*
+    };
+}
+
+impl_signature_for_unsized!(
+    str,
+    strings::String,
+    strings::Signature,
+    strings::ObjectPath,
+);
 
 #[test]
 fn test_signature() {

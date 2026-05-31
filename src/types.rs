@@ -130,16 +130,16 @@ macro_rules! define_dict {
             type Proxy<'_a> = [$crate::Entry<&'static str, $crate::Variant<()>>];
         }
         impl<$($a)?> $crate::marshal::Marshal for $name<$($a)?> where Self: Clone {
-            fn marshal<W: $crate::marshal::Write + ?Sized>(self, w: &mut W) {
+            fn marshal<W: $crate::marshal::Write + ?Sized>(&self, w: &mut W) {
                 let insert_pos = w.skip_aligned(4);
                 let begin = w.position();
                 $(if let Some(value) = self.$field {
                     w.align_to(8);
                     w.write(stringify!($field));
-                    w.write($crate::Variant(value));
+                    w.write(&$crate::Variant(value));
                 })*
                 let len = w.position() - begin;
-                w.insert(len as u32, insert_pos);
+                w.insert(&(len as u32), insert_pos);
             }
         }
         $crate::define_dict!(@unmarshal $name $entry $key $value $($a)? $($field $type)*);

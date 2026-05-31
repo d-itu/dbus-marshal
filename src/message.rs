@@ -156,12 +156,12 @@ macro_rules! define_fields {
             })*
         }
 
-        impl Marshal for &Fields<'_> {
-            fn marshal<W: marshal::Write + ?Sized>(self, w: &mut W) {
+        impl Marshal for Fields<'_> {
+            fn marshal<W: marshal::Write + ?Sized>(&self, w: &mut W) {
                 $(if let Some(value) = self.$field {
                     w.align_to(8);
-                    w.write($id as u8);
-                    w.write(Variant(value));
+                    w.write(&($id as u8));
+                    w.write(&Variant(value));
                 })*
             }
         }
@@ -335,8 +335,8 @@ impl OwnedMessage<Box<[u8]>> {
     }
 }
 
-impl<T: Marshal> Marshal for &Message<'_, T> {
-    fn marshal<W: marshal::Write + ?Sized>(self, w: &mut W) {
+impl<T: Marshal> Marshal for Message<'_, T> {
+    fn marshal<W: marshal::Write + ?Sized>(&self, w: &mut W) {
         let Message { header, arguments } = self;
         w.write_byte(NATIVE_ENDIAN as _);
         w.write_byte(header.message_type as _);
@@ -344,20 +344,20 @@ impl<T: Marshal> Marshal for &Message<'_, T> {
         w.write_byte(1);
         let args_len_insertion = w.position();
         w.seek(4);
-        w.write(header.serial);
+        w.write(&header.serial);
 
         let header_len_insertion = w.position();
         w.seek(4);
         w.align_to(8);
         w.write(&header.fields);
         let header_len = w.position() - 16;
-        w.insert(header_len as u32, header_len_insertion);
+        w.insert(&(header_len as u32), header_len_insertion);
         w.align_to(8);
 
         let args_begin = w.position();
         arguments.marshal(w);
         let args_len = w.position() - args_begin;
-        w.insert(args_len as u32, args_len_insertion);
+        w.insert(&(args_len as u32), args_len_insertion);
     }
 }
 

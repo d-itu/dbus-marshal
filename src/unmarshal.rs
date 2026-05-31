@@ -199,7 +199,7 @@ pub struct ArrayIter<'a, T> {
 }
 
 impl<'a, T: Clone> crate::marshal::Marshal for ArrayIter<'a, T> {
-    fn marshal<W: crate::marshal::Write + ?Sized>(self, _: &mut W) {
+    fn marshal<W: crate::marshal::Write + ?Sized>(&self, _: &mut W) {
         unimplemented!()
     }
 }
