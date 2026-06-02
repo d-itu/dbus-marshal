@@ -33,7 +33,6 @@ pub(crate) use private::StructConstructor;
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Empty;
-impl StructConstructor for Empty {}
 unsafe impl MultiSignature for Empty {
     type Data = ();
     const DATA: Self::Data = ();
@@ -41,7 +40,7 @@ unsafe impl MultiSignature for Empty {
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Append<Xs, X>(pub Xs, pub X);
-impl<X, Xs: StructConstructor> StructConstructor for Append<X, Xs> {}
+impl<X, Xs> StructConstructor for Append<X, Xs> {}
 unsafe impl<X: Signature, Xs: MultiSignature> MultiSignature for Append<X, Xs> {
     type Data = signature::Pair<X::Data, Xs::Data>;
     const DATA: Self::Data = signature::Pair(X::DATA, Xs::DATA);
