@@ -18,6 +18,7 @@ pub mod marshal;
 pub mod signature;
 pub mod unmarshal;
 
+pub use dbus_marshal_macros::*;
 pub use message::*;
 pub use strings::*;
 pub use types::*;
