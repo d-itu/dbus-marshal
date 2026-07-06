@@ -41,7 +41,7 @@ impl Field {
     ) -> Self {
         let ident = ident
             .clone()
-            .unwrap_or_else(|| proc_macro_error::abort_call_site!("field must have a name"));
+            .unwrap_or_else(|| proc_macro_error::abort!(ident.span(), "field must have a name"));
         Field {
             ty: ty.clone(),
             name: field_name(&ident, attrs),
@@ -84,7 +84,8 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
         (Some(syn::GenericParam::Lifetime(syn::LifetimeParam { lifetime, .. })), None) => {
             quote!(<#lifetime>)
         }
-        _ => proc_macro_error::abort_call_site!(
+        _ => proc_macro_error::abort!(
+            input.generics.span(),
             "dict must contain no more than 1 lifetime generic parameter"
         ),
     };
