@@ -140,33 +140,32 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
 
     // TODO: allow unknown fields
     quote! {
-        #[allow(non_camel_case_types)]
-        enum #key_name {
-            #(#key_fields),*
-        }
-        union #value_name #lifetime {
-            #(#value_fields)*
-        }
-        struct #entry_name #lifetime(#key_name, #value_name #lifetime);
-
-        impl #lifetime #crate_path::signature::SignatureProxy for #entry_name #lifetime {
-            type Proxy<'_a> = #crate_path::Entry<&'static str, #crate_path::Variant>;
-        }
-        impl #lifetime #crate_path::unmarshal::Unmarshal #unmarshal_lifetime for #entry_name #lifetime {
-            fn unmarshal(r: &mut #crate_path::unmarshal::Reader #unmarshal_lifetime) -> #crate_path::unmarshal::Result<Self> {
-                let key: &#crate_path::String = r.read()?;
-                match unsafe { str::from_utf8_unchecked(key) } {
-                    #(#unmarshal_key)*
-                    x => {dbg!(x); Err(#crate_path::unmarshal::Error::InvalidArgs)?}
-                }
-            }
-        }
-
         impl #lifetime #crate_path::signature::SignatureProxy for #dict_name #lifetime {
             type Proxy<'_a> = [#crate_path::Entry<&'static str, #crate_path::Variant>];
         }
         impl #lifetime #crate_path::unmarshal::Unmarshal #unmarshal_lifetime for #dict_name #lifetime {
             fn unmarshal(r: &mut #crate_path::unmarshal::Reader #unmarshal_lifetime) -> #crate_path::unmarshal::Result<Self> {
+                #[allow(non_camel_case_types)]
+                enum #key_name {
+                    #(#key_fields),*
+                }
+                union #value_name #lifetime {
+                    #(#value_fields)*
+                }
+                struct #entry_name #lifetime(#key_name, #value_name #lifetime);
+
+                impl #lifetime #crate_path::signature::SignatureProxy for #entry_name #lifetime {
+                    type Proxy<'_a> = #crate_path::Entry<&'static str, #crate_path::Variant>;
+                }
+                impl #lifetime #crate_path::unmarshal::Unmarshal #unmarshal_lifetime for #entry_name #lifetime {
+                    fn unmarshal(r: &mut #crate_path::unmarshal::Reader #unmarshal_lifetime) -> #crate_path::unmarshal::Result<Self> {
+                        let key: &#crate_path::String = r.read()?;
+                        match unsafe { str::from_utf8_unchecked(key) } {
+                            #(#unmarshal_key)*
+                            x => {dbg!(x); Err(#crate_path::unmarshal::Error::InvalidArgs)?}
+                        }
+                    }
+                }
                 let mut res = Self { #(#dict_init_fields: None,)* };
                 let seq: #crate_path::unmarshal::ArrayIter<'_, #entry_name> = r.read()?;
                 for entry in seq {
