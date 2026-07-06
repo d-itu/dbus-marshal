@@ -98,9 +98,6 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
     let fields: Vec<_> = dict.fields.iter().map(Field::from_syn).collect();
 
     let dict_name = &input.ident;
-    let key_name = Ident::new(&format!("{}Key", input.ident), Span::call_site());
-    let value_name = Ident::new(&format!("{}Value", input.ident), Span::call_site());
-    let entry_name = Ident::new(&format!("{}Entry", input.ident), Span::call_site());
     let key_fields = fields.iter().map(|Field { ident, .. }| ident);
     let value_fields = fields.iter().map(|Field { ident, ty, .. }| {
         quote! {
@@ -112,8 +109,8 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
             #name => {
                 let val: #crate_path::Variant<#ty> = r.read()?;
                 Ok(Self(
-                    #key_name::#ident,
-                    #value_name {
+                    Key::#ident,
+                    Value {
                         #ident: val.0,
                     },
                 ))
@@ -140,18 +137,18 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
         impl #lifetime #crate_path::unmarshal::Unmarshal #unmarshal_lifetime for #dict_name #lifetime {
             fn unmarshal(r: &mut #crate_path::unmarshal::Reader #unmarshal_lifetime) -> #crate_path::unmarshal::Result<Self> {
                 #[allow(non_camel_case_types)]
-                enum #key_name {
+                enum Key {
                     #(#key_fields),*
                 }
-                union #value_name #lifetime {
+                union Value #lifetime {
                     #(#value_fields)*
                 }
-                struct #entry_name #lifetime(#key_name, #value_name #lifetime);
+                struct Entry #lifetime(Key, Value #lifetime);
 
-                impl #lifetime #crate_path::signature::SignatureProxy for #entry_name #lifetime {
+                impl #lifetime #crate_path::signature::SignatureProxy for Entry #lifetime {
                     type Proxy<'_a> = #crate_path::Entry<&'static str, #crate_path::Variant>;
                 }
-                impl #lifetime #crate_path::unmarshal::Unmarshal #unmarshal_lifetime for #entry_name #lifetime {
+                impl #lifetime #crate_path::unmarshal::Unmarshal #unmarshal_lifetime for Entry #lifetime {
                     fn unmarshal(r: &mut #crate_path::unmarshal::Reader #unmarshal_lifetime) -> #crate_path::unmarshal::Result<Self> {
                         let key: &#crate_path::String = r.read()?;
                         match unsafe { str::from_utf8_unchecked(key) } {
@@ -161,11 +158,11 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
                     }
                 }
                 let mut res = Self { #(#dict_init_fields: None,)* };
-                let seq: #crate_path::unmarshal::ArrayIter<'_, #entry_name> = r.read()?;
+                let seq: #crate_path::unmarshal::ArrayIter<'_, Entry> = r.read()?;
                 for entry in seq {
-                    let #entry_name(key, val) = entry?;
+                    let Entry(key, val) = entry?;
                     match key {
-                        #(#key_name::#unmarshal_fields => res.#unmarshal_fields = Some(unsafe { val.#unmarshal_fields }),)*
+                        #(Key::#unmarshal_fields => res.#unmarshal_fields = Some(unsafe { val.#unmarshal_fields }),)*
                     }
                 }
                 Ok(res)
