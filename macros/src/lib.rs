@@ -3,7 +3,9 @@ use proc_macro_crate::{FoundCrate, crate_name};
 use proc_macro_error::proc_macro_error;
 use proc_macro2::Span;
 use quote::{ToTokens as _, quote};
-use syn::{Data, DeriveInput, Expr, Ident, LitStr, Type, parse_macro_input};
+use syn::{
+    Data, DeriveInput, Expr, ExprLit, Ident, LitStr, MetaNameValue, Type, spanned::Spanned as _,
+};
 
 extern crate proc_macro;
 
@@ -13,10 +15,45 @@ struct Field {
     name: LitStr,
 }
 
+fn field_name(ident: &Ident, attrs: &[syn::Attribute]) -> LitStr {
+    for attr in attrs {
+        if let syn::Meta::NameValue(MetaNameValue { path, value, .. }) = &attr.meta
+            && let Some(key) = path.get_ident()
+            && key.to_string() == "name"
+        {
+            return if let Expr::Lit(ExprLit { lit, .. }) = value
+                && let syn::Lit::Str(x) = &lit
+            {
+                x.clone()
+            } else {
+                proc_macro_error::abort!(value.span(), "name must be a string literal")
+            };
+        }
+    }
+    LitStr::new(&ident.to_string(), Span::call_site())
+}
+
+impl Field {
+    fn from_syn(
+        syn::Field {
+            attrs, ident, ty, ..
+        }: &syn::Field,
+    ) -> Self {
+        let ident = ident
+            .clone()
+            .unwrap_or_else(|| proc_macro_error::abort_call_site!("field must have a name"));
+        Field {
+            ty: ty.clone(),
+            name: field_name(&ident, attrs),
+            ident,
+        }
+    }
+}
+
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn dict(_attr: TokenStream, input: TokenStream) -> TokenStream {
-    let mut input = parse_macro_input!(input as DeriveInput);
+    let mut input = syn::parse_macro_input!(input as DeriveInput);
     let dict = match &mut input.data {
         Data::Struct(s) => s,
         _ => proc_macro_error::abort_call_site!("`derive(Dict)` should be used on a struct"),
@@ -39,7 +76,7 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
         }
         Err(_) => proc_macro_error::abort_call_site!("dbus-marshal not found"),
     };
-    let input = parse_macro_input!(input as DeriveInput);
+    let input = syn::parse_macro_input!(input as DeriveInput);
 
     let mut iter = input.generics.params.iter();
     let unmarshal_lifetime = match (iter.next(), iter.next()) {
@@ -57,51 +94,7 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
         Data::Struct(s) => s,
         _ => proc_macro_error::abort_call_site!("`derive(Dict)` should be used on a struct"),
     };
-    let fields: Vec<_> = dict
-        .fields
-        .iter()
-        .map(
-            |syn::Field {
-                 attrs, ident, ty, ..
-             }| {
-                let ident = ident.clone().unwrap_or_else(|| {
-                    proc_macro_error::abort_call_site!("field must have a name")
-                });
-                Field {
-                    ty: ty.clone(),
-                    name: {
-                        let mut name = LitStr::new(&ident.to_string(), Span::call_site());
-                        for attr in attrs {
-                            match &attr.meta {
-                                syn::Meta::NameValue(syn::MetaNameValue {
-                                    path, value, ..
-                                }) => {
-                                    if let Some(key) = path.get_ident()
-                                        && key.to_string() == "name"
-                                    {
-                                        name = match value {
-                                            Expr::Lit(lit) => match &lit.lit {
-                                                syn::Lit::Str(lit_str) => lit_str.clone(),
-                                                _ => proc_macro_error::abort_call_site!(
-                                                    "name must be a string literal"
-                                                ),
-                                            },
-                                            _ => proc_macro_error::abort_call_site!(
-                                                "name must be a string literal"
-                                            ),
-                                        }
-                                    }
-                                }
-                                _ => {}
-                            }
-                        }
-                        name
-                    },
-                    ident,
-                }
-            },
-        )
-        .collect();
+    let fields: Vec<_> = dict.fields.iter().map(Field::from_syn).collect();
 
     let dict_name = &input.ident;
     let key_name = Ident::new(&format!("{}Key", input.ident), Span::call_site());
