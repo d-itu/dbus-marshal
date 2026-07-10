@@ -153,7 +153,7 @@ pub fn impl_dict(input: TokenStream) -> TokenStream {
                         let key: &#crate_path::String = r.read()?;
                         match unsafe { str::from_utf8_unchecked(key) } {
                             #(#unmarshal_key)*
-                            x => {dbg!(x); Err(#crate_path::unmarshal::Error::InvalidArgs)?}
+                            x => Err(#crate_path::unmarshal::Error::InvalidArgs)?
                         }
                     }
                 }
